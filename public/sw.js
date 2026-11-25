@@ -1,12 +1,12 @@
-const CACHE_NAME = 'meowgambit-v6';
+const CACHE_NAME = 'meowgambit-v7';
 const ASSETS_TO_CACHE = [
   '/',
   '/index.html',
   '/manifest.json',
   '/logo.png',
-  '/lobby-bg.png',
-  '/arena-bg.png',
-  '/arena-bg-flat.png',
+  '/lobby-bg.jpg',
+  '/arena-bg.jpg',
+  '/arena-bg-flat.jpg',
   '/favicon.png',
   '/icon-192.png',
   '/icon-512.png',

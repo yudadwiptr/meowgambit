@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import type { Color } from 'chess.js';
 import {
   BookOpen,
@@ -75,6 +75,17 @@ export const MainMenu: React.FC<MainMenuProps> = ({
 }) => {
   const [copiedType, setCopiedType] = useState<'code' | 'link' | null>(null);
 
+  // Lazily pre-warm lightweight arena backgrounds after Lobby paints so entering battle is instant!
+  useEffect(() => {
+    const id = window.setTimeout(() => {
+      ['/arena-bg.jpg', '/arena-bg-flat.jpg'].forEach((src) => {
+        const img = new Image();
+        img.src = src;
+      });
+    }, 600);
+    return () => window.clearTimeout(id);
+  }, []);
+
   const updateMode = (mode: GameMode) => onChangeConfig({ ...config, mode });
   const updateDifficulty = (difficulty: Difficulty) => onChangeConfig({ ...config, difficulty });
   const updateTimeControl = (timeControl: TimeControl) => onChangeConfig({ ...config, timeControl });
@@ -95,7 +106,7 @@ export const MainMenu: React.FC<MainMenuProps> = ({
     <div
       className="h-[100dvh] w-full overflow-hidden relative flex flex-col items-center justify-center bg-[#5A8E3D]"
       style={{
-        backgroundImage: "url('/lobby-bg.png')",
+        backgroundImage: "url('/lobby-bg.jpg')",
         backgroundSize: 'cover',
         backgroundPosition: 'center',
         backgroundRepeat: 'no-repeat',
@@ -109,6 +120,20 @@ export const MainMenu: React.FC<MainMenuProps> = ({
             'radial-gradient(ellipse at center, rgba(24, 36, 18, 0.06) 35%, rgba(16, 28, 14, 0.32) 100%)',
         }}
       />
+
+      {/* TOP-LEFT CORNER: ROUNDED BLUE SKILL CODEX PILL */}
+      <div className="absolute top-3 left-3 sm:top-4 sm:left-5 z-20">
+        <button
+          type="button"
+          onClick={onOpenRoster}
+          className="casual-btn casual-btn-blue rounded-full px-3.5 py-2 sm:px-4 sm:py-2.5 font-display text-xs sm:text-sm uppercase flex items-center gap-2 text-white"
+        >
+          <span className="w-6 h-6 rounded-lg bg-[#9E6238] border-2 border-[#3A2210] flex items-center justify-center shadow-inner">
+            <BookOpen className="w-3.5 h-3.5 text-[#FFF2C2]" />
+          </span>
+          <span className="cartoon-text-shadow-bold text-white">{t.skillCodexBtn}</span>
+        </button>
+      </div>
 
       {/* TOP-RIGHT CORNER: AUDIO & LANGUAGE ROUNDED BUTTONS */}
       <div className="absolute top-3 right-3 sm:top-4 sm:right-5 z-20 flex items-center gap-2">
@@ -576,20 +601,6 @@ export const MainMenu: React.FC<MainMenuProps> = ({
             </>
           )}
         </div>
-      </div>
-
-      {/* BOTTOM-LEFT CORNER: ROUNDED BLUE SKILL CODEX PILL */}
-      <div className="absolute bottom-3 left-3 sm:bottom-4 sm:left-5 z-20">
-        <button
-          type="button"
-          onClick={onOpenRoster}
-          className="casual-btn casual-btn-blue rounded-full px-3.5 py-2 sm:px-4 sm:py-2.5 font-display text-xs sm:text-sm uppercase flex items-center gap-2 text-white"
-        >
-          <span className="w-6 h-6 rounded-lg bg-[#9E6238] border-2 border-[#3A2210] flex items-center justify-center shadow-inner">
-            <BookOpen className="w-3.5 h-3.5 text-[#FFF2C2]" />
-          </span>
-          <span className="cartoon-text-shadow-bold text-white">{t.skillCodexBtn}</span>
-        </button>
       </div>
     </div>
   );

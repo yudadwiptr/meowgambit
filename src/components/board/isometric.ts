@@ -59,14 +59,14 @@ export function getStageMetrics(view: BoardView): StageMetrics {
       w: FLAT_STAGE_W,
       h: FLAT_STAGE_H,
       nativeRatio: FLAT_NATIVE_W / FLAT_NATIVE_H,
-      imageUrl: '/arena-bg-flat.png',
+      imageUrl: '/arena-bg-flat.jpg',
     };
   }
   return {
     w: ARENA_W,
     h: ARENA_H,
     nativeRatio: ARENA_NATIVE_W / ARENA_NATIVE_H,
-    imageUrl: '/arena-bg.png',
+    imageUrl: '/arena-bg.jpg',
   };
 }
 
