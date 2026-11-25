@@ -19,6 +19,7 @@ import type {
   EmoteKey,
   GameConfig,
   GameOutcome,
+  GameRuleset,
   MoveRecord,
   OnlineConnectionStatus,
   OnlineMessage,
@@ -41,7 +42,11 @@ import { soundEngine } from './engine/soundEngine';
 import { ChessBoard } from './components/board/ChessBoard';
 import type { BoardView } from './components/board/isometric';
 import { PlayerHud } from './components/hud/PlayerHud';
-import { ActionCluster } from './components/hud/ActionCluster';
+import {
+  ActionCluster,
+  DOUBLE_JUMP_COST,
+  SCRATCH_COST,
+} from './components/hud/ActionCluster';
 import { PromotionModal } from './components/modals/PromotionModal';
 import { GameOverModal } from './components/modals/GameOverModal';
 import { RosterModal } from './components/modals/RosterModal';
@@ -49,6 +54,7 @@ import { MainMenu } from './components/screens/MainMenu';
 
 const DEFAULT_CONFIG: GameConfig = {
   mode: 'bot',
+  ruleset: 'arcade',
   difficulty: 'medium',
   timeControl: 'rapid',
   playerColor: 'w',
@@ -56,6 +62,79 @@ const DEFAULT_CONFIG: GameConfig = {
 };
 
 const MAX_ARMY_POINTS = 39;
+
+/** Flips the side-to-move token in a FEN string (used safely for Arcade Double Jump bonus turn) */
+function flipFenTurn(fenStr: string): string {
+  const parts = fenStr.split(' ');
+  if (parts.length < 6) return fenStr;
+  parts[1] = parts[1] === 'w' ? 'b' : 'w';
+  parts[3] = '-'; // clear en passant target
+  return parts.join(' ');
+}
+
+/**
+ * Checks whether a modified FEN leaves the non-moving opponent's King illegally exposed to capture.
+ * Returns true only if the resulting FEN is 100% legal for chess.js.
+ */
+function isFenSafeForArcade(fenStr: string): boolean {
+  try {
+    const test = new Chess(fenStr);
+    // Also verify flipping turn doesn't mean the side NOT to move is already in check
+    const flipped = new Chess(flipFenTurn(test.fen()));
+    if (flipped.inCheck()) return false;
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Computes all valid enemy squares that Cakar Kilat / Scratch Burst (60⚡) can target:
+ * - Enemy Pawns: slashed & removed (if legal without illegal exposed check)
+ * - Enemy Knight/Bishop/Rook/Queen: pushed back 1 rank toward enemy home side if that square is empty
+ */
+function computeScratchTargets(
+  chess: Chess,
+  caster: Color
+): Map<Square, { action: 'destroy' } | { action: 'push'; to: Square }> {
+  const result = new Map<Square, { action: 'destroy' } | { action: 'push'; to: Square }>();
+  const enemy: Color = caster === 'w' ? 'b' : 'w';
+  const files = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'];
+  const board = chess.board();
+  const baseFen = chess.fen();
+
+  for (let r = 0; r < 8; r++) {
+    for (let c = 0; c < 8; c++) {
+      const piece = board[r][c];
+      if (!piece || piece.color !== enemy || piece.type === 'k') continue;
+      const rankNum = 8 - r;
+      const sq = `${files[c]}${rankNum}` as Square;
+
+      if (piece.type === 'p') {
+        const clone = new Chess(baseFen);
+        clone.remove(sq);
+        if (isFenSafeForArcade(clone.fen())) {
+          result.set(sq, { action: 'destroy' });
+        }
+      } else {
+        // Push enemy piece 1 square back toward its home rank
+        const pushRank = enemy === 'b' ? rankNum + 1 : rankNum - 1;
+        if (pushRank < 1 || pushRank > 8) continue;
+        const pushSq = `${files[c]}${pushRank}` as Square;
+        if (chess.get(pushSq)) continue;
+
+        const clone = new Chess(baseFen);
+        clone.remove(sq);
+        clone.put({ type: piece.type, color: piece.color }, pushSq);
+        if (isFenSafeForArcade(clone.fen())) {
+          result.set(sq, { action: 'push', to: pushSq });
+        }
+      }
+    }
+  }
+
+  return result;
+}
 
 function formatClock(ms: number | null): string {
   if (ms === null) return '∞';
@@ -71,9 +150,13 @@ function formatClock(ms: number | null): string {
   return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
 }
 
-function computeArmyStats(chess: Chess, history: Move[]) {
-  const capturedByWhite: PieceSymbol[] = [];
-  const capturedByBlack: PieceSymbol[] = [];
+function computeArmyStats(
+  chess: Chess,
+  history: Move[],
+  bonusCaptured: { w: PieceSymbol[]; b: PieceSymbol[] }
+) {
+  const capturedByWhite: PieceSymbol[] = [...bonusCaptured.w];
+  const capturedByBlack: PieceSymbol[] = [...bonusCaptured.b];
 
   for (const m of history) {
     if (m.captured) {
@@ -205,6 +288,19 @@ export default function App() {
   const clocksRef = useRef(clocks);
   clocksRef.current = clocks;
 
+  // Arcade Mode ⚡ Active Skill Economy & State
+  const [arcadeEnergy, setArcadeEnergy] = useState<{ w: number; b: number }>({ w: 40, b: 40 });
+  const arcadeEnergyRef = useRef(arcadeEnergy);
+  arcadeEnergyRef.current = arcadeEnergy;
+  const [targetingScratch, setTargetingScratch] = useState<boolean>(false);
+  const [doubleJumpArmed, setDoubleJumpArmed] = useState<boolean>(false);
+  const doubleJumpArmedRef = useRef(doubleJumpArmed);
+  doubleJumpArmedRef.current = doubleJumpArmed;
+  const [bonusCaptured, setBonusCaptured] = useState<{ w: PieceSymbol[]; b: PieceSymbol[] }>({
+    w: [],
+    b: [],
+  });
+
   // Cinematic VFX & Emotes
   const [vfxEvent, setVfxEvent] = useState<SkillVfxEvent | null>(null);
   const [isShaking, setIsShaking] = useState<boolean>(false);
@@ -279,8 +375,21 @@ export default function App() {
 
   const armyStats = useMemo(() => {
     void fen;
-    return computeArmyStats(chess, historyVerbose);
-  }, [chess, fen, historyVerbose]);
+    return computeArmyStats(chess, historyVerbose, bonusCaptured);
+  }, [chess, fen, historyVerbose, bonusCaptured]);
+
+  const isArcade = config.ruleset === 'arcade';
+
+  const scratchTargetMap = useMemo(() => {
+    void fen;
+    if (!isArcade || !targetingScratch) return new Map();
+    return computeScratchTargets(chess, currentTurn);
+  }, [chess, fen, isArcade, targetingScratch, currentTurn]);
+
+  const scratchTargetSquares: Square[] = useMemo(
+    () => Array.from(scratchTargetMap.keys()),
+    [scratchTargetMap]
+  );
 
   const legalMovesForSelected: Move[] = useMemo(() => {
     void fen;
@@ -351,6 +460,10 @@ export default function App() {
       setActiveEmotes({});
       setRematchState('none');
       setOnlineDisconnected(false);
+      setArcadeEnergy({ w: 40, b: 40 });
+      setTargetingScratch(false);
+      setDoubleJumpArmed(false);
+      setBonusCaptured({ w: [], b: [] });
       setLastSkillLog(tRef.current.startLog);
 
       const baseSec = TIME_CONTROL_SECONDS[nextConfig.timeControl];
@@ -378,7 +491,13 @@ export default function App() {
       from: Square,
       to: Square,
       promotion?: 'q' | 'r' | 'b' | 'n',
-      opts?: { isRemote?: boolean; expectedFen?: string; syncedClocks?: { w: number | null; b: number | null } }
+      opts?: {
+        isRemote?: boolean;
+        expectedFen?: string;
+        syncedClocks?: { w: number | null; b: number | null };
+        syncedEnergy?: { w: number; b: number };
+        doubleJumpTriggered?: boolean;
+      }
     ) => {
       const c = chessRef.current;
       const wasInCheckBefore = c.inCheck();
@@ -387,7 +506,6 @@ export default function App() {
       try {
         applied = c.move({ from, to, promotion });
       } catch {
-        // Fallback FEN sync if remote move desynced
         if (opts?.isRemote && opts.expectedFen) {
           c.load(opts.expectedFen);
           setFen(c.fen());
@@ -397,6 +515,29 @@ export default function App() {
       }
       if (!applied) return false;
 
+      const isCapture = Boolean(applied.captured) || applied.flags.includes('e');
+      const isCastle = applied.flags.includes('k') || applied.flags.includes('q');
+      const nowInCheck = c.inCheck();
+      const nowCheckmate = c.isCheckmate();
+      const isGameOverAfter = c.isGameOver();
+
+      // Arcade ⚡ Double Jump Bonus Turn: if armed and move didn't check/end game, keep the turn!
+      let didDoubleJump = Boolean(opts?.doubleJumpTriggered);
+      if (
+        !opts?.isRemote &&
+        configRef.current.ruleset === 'arcade' &&
+        doubleJumpArmedRef.current
+      ) {
+        setDoubleJumpArmed(false);
+        if (!nowInCheck && !isGameOverAfter) {
+          const flippedFen = flipFenTurn(c.fen());
+          if (isFenSafeForArcade(flippedFen)) {
+            c.load(flippedFen);
+            didDoubleJump = true;
+          }
+        }
+      }
+
       if (opts?.isRemote && opts.expectedFen && c.fen() !== opts.expectedFen) {
         c.load(opts.expectedFen);
       }
@@ -404,9 +545,24 @@ export default function App() {
         setClocks(opts.syncedClocks);
       }
 
+      // Update Arcade Energy economy
+      let nextEnergy = arcadeEnergyRef.current;
+      if (opts?.isRemote && opts.syncedEnergy) {
+        nextEnergy = opts.syncedEnergy;
+        setArcadeEnergy(nextEnergy);
+      } else if (configRef.current.ruleset === 'arcade') {
+        const gain = (isCapture ? 35 : 20) + (nowInCheck ? 15 : 0);
+        nextEnergy = {
+          ...arcadeEnergyRef.current,
+          [applied.color]: Math.min(100, arcadeEnergyRef.current[applied.color] + gain),
+        };
+        setArcadeEnergy(nextEnergy);
+      }
+
       const newFen = c.fen();
       setFen(newFen);
       setSelectedSquare(null);
+      setTargetingScratch(false);
       setHintMove(null);
       setPendingPromotion(null);
       setLastMove({ from: applied.from, to: applied.to });
@@ -420,13 +576,11 @@ export default function App() {
           promotion: applied.promotion as 'q' | 'r' | 'b' | 'n' | undefined,
           fen: newFen,
           clocks: clocksRef.current,
+          energy: nextEnergy,
+          doubleJumpTriggered: didDoubleJump,
         });
       }
 
-      const isCapture = Boolean(applied.captured) || applied.flags.includes('e');
-      const isCastle = applied.flags.includes('k') || applied.flags.includes('q');
-      const nowInCheck = c.inCheck();
-      const nowCheckmate = c.isCheckmate();
       const isKingAction = applied.piece === 'k' && (wasInCheckBefore || isCastle || !isCapture);
 
       const curT = tRef.current;
@@ -434,7 +588,7 @@ export default function App() {
       const localizedPiece = curT.pieces[`${applied.color}-${applied.piece}`];
 
       // Trigger 1.2s non-blocking SLASH! & Skill VFX on capture, check, checkmate, or King Roar/Bastion
-      if (isCapture || nowInCheck || nowCheckmate || isKingAction) {
+      if (isCapture || nowInCheck || nowCheckmate || isKingAction || didDoubleJump) {
         const nextId = ++vfxIdRef.current;
         const shouldShake =
           nowCheckmate || (isCapture && meta.triggersShake) || (nowInCheck && applied.piece === 'q');
@@ -448,9 +602,9 @@ export default function App() {
           isCapture,
           isCheck: nowInCheck,
           isCheckmate: nowCheckmate,
-          isKingEscapeOrMove: isKingAction && !isCapture && !nowInCheck,
-          skillName: localizedPiece.skillName,
-          callout: localizedPiece.callout,
+          isKingEscapeOrMove: (isKingAction || didDoubleJump) && !isCapture && !nowInCheck,
+          skillName: didDoubleJump ? curT.skillCard2 : localizedPiece.skillName,
+          callout: didDoubleJump ? `${curT.skillCard2.toUpperCase()}!` : localizedPiece.callout,
           checkLabel: curT.vfxCheck,
           checkmateLabel: curT.vfxCheckmate,
           bonkLabel: curT.vfxBonk,
@@ -466,11 +620,13 @@ export default function App() {
             ? ` — ${curT.checkBadge}`
             : '';
         setLastSkillLog(
-          curT.usedSkillLog(
-            localizedPiece.name.toUpperCase(),
-            localizedPiece.skillName.toUpperCase(),
-            suffix
-          )
+          didDoubleJump
+            ? curT.doubleJumpExtraTurn
+            : curT.usedSkillLog(
+                localizedPiece.name.toUpperCase(),
+                localizedPiece.skillName.toUpperCase(),
+                suffix
+              )
         );
 
         if (vfxTimerRef.current) window.clearTimeout(vfxTimerRef.current);
@@ -545,18 +701,21 @@ export default function App() {
     (msg: OnlineMessage) => {
       const curT = tRef.current;
       if (msg.type === 'hello') {
-        // Host receives Guest hello -> send agreed timeControl and launch arena!
         const nextCfg: GameConfig = { ...configRef.current, mode: 'online' };
         setConfig(nextCfg);
-        mpRef.current.send({ type: 'start', timeControl: nextCfg.timeControl });
+        mpRef.current.send({
+          type: 'start',
+          timeControl: nextCfg.timeControl,
+          ruleset: nextCfg.ruleset,
+        });
         setOnlineStatus('connected');
         startNewMatch(nextCfg, 'host');
       } else if (msg.type === 'start') {
-        // Guest receives start packet with Host's timeControl -> launch arena flipped to Black!
         const nextCfg: GameConfig = {
           ...configRef.current,
           mode: 'online',
           timeControl: msg.timeControl as TimeControl,
+          ruleset: (msg.ruleset ?? 'classic') as GameRuleset,
         };
         setConfig(nextCfg);
         setOnlineStatus('connected');
@@ -566,7 +725,57 @@ export default function App() {
           isRemote: true,
           expectedFen: msg.fen,
           syncedClocks: msg.clocks,
+          syncedEnergy: msg.energy,
+          doubleJumpTriggered: msg.doubleJumpTriggered,
         });
+      } else if (msg.type === 'skill_scratch') {
+        const c = chessRef.current;
+        c.load(msg.fen);
+        setFen(c.fen());
+        setArcadeEnergy(msg.energy);
+        if (msg.destroyed) {
+          setBonusCaptured((prev) => ({
+            ...prev,
+            [msg.caster]: [...prev[msg.caster], 'p'],
+          }));
+        }
+        const nextId = ++vfxIdRef.current;
+        setVfxEvent({
+          id: nextId,
+          pieceColor: msg.caster,
+          pieceType: 'q',
+          from: msg.targetSq,
+          to: msg.pushedTo ?? msg.targetSq,
+          isCapture: true,
+          isCheck: false,
+          isCheckmate: false,
+          isKingEscapeOrMove: false,
+          skillName: curT.skillCard1,
+          callout: `${curT.skillCard1.toUpperCase()}!`,
+          checkLabel: curT.vfxCheck,
+          checkmateLabel: curT.vfxCheckmate,
+          bonkLabel: curT.vfxBonk,
+          accentColor: '#FF9C24',
+          triggersShake: true,
+          timestamp: Date.now(),
+        });
+        setLastSkillLog(
+          msg.destroyed
+            ? curT.scratchUsedDestroy(msg.targetSq)
+            : curT.scratchUsedPush(msg.targetSq, msg.pushedTo ?? msg.targetSq)
+        );
+        soundEngine.playSkillCapture('q');
+        setIsShaking(true);
+        if (shakeTimerRef.current) window.clearTimeout(shakeTimerRef.current);
+        shakeTimerRef.current = window.setTimeout(() => setIsShaking(false), 360);
+        if (vfxTimerRef.current) window.clearTimeout(vfxTimerRef.current);
+        vfxTimerRef.current = window.setTimeout(() => {
+          setVfxEvent((cur) => (cur?.id === nextId ? null : cur));
+        }, 1250);
+      } else if (msg.type === 'skill_double_jump') {
+        setArcadeEnergy(msg.energy);
+        setLastSkillLog(curT.doubleJumpArmed);
+        soundEngine.playKingAura();
       } else if (msg.type === 'emote') {
         triggerEmoteForColor(msg.color, msg.emote);
       } else if (msg.type === 'surrender') {
@@ -859,9 +1068,159 @@ export default function App() {
     (config.mode === 'bot' && currentTurn !== config.playerColor) ||
     isWaitingForOnlineOpponent;
 
+  const executeScratchOnSquare = useCallback(
+    (sq: Square) => {
+      const plan = scratchTargetMap.get(sq);
+      if (!plan) return false;
+      const c = chessRef.current;
+      const caster = c.turn();
+      const targetPiece = c.get(sq);
+      if (!targetPiece) return false;
+
+      if (plan.action === 'destroy') {
+        c.remove(sq);
+        setBonusCaptured((prev) => ({
+          ...prev,
+          [caster]: [...prev[caster], targetPiece.type],
+        }));
+      } else {
+        c.remove(sq);
+        c.put({ type: targetPiece.type, color: targetPiece.color }, plan.to);
+      }
+
+      const nextEnergy = {
+        ...arcadeEnergyRef.current,
+        [caster]: Math.max(0, arcadeEnergyRef.current[caster] - SCRATCH_COST),
+      };
+      setArcadeEnergy(nextEnergy);
+      const updatedFen = c.fen();
+      setFen(updatedFen);
+      setTargetingScratch(false);
+      setSelectedSquare(null);
+
+      // Broadcast Arcade Scratch Burst to online opponent
+      if (configRef.current.mode === 'online') {
+        mpRef.current.send({
+          type: 'skill_scratch',
+          caster,
+          targetSq: sq,
+          pushedTo: plan.action === 'push' ? plan.to : undefined,
+          destroyed: plan.action === 'destroy',
+          fen: updatedFen,
+          energy: nextEnergy,
+        });
+      }
+
+      // Cinematic SLASH! VFX + Screen Shake + Sound
+      const nextId = ++vfxIdRef.current;
+      setVfxEvent({
+        id: nextId,
+        pieceColor: caster,
+        pieceType: 'q',
+        from: sq,
+        to: plan.action === 'push' ? plan.to : sq,
+        isCapture: true,
+        isCheck: false,
+        isCheckmate: false,
+        isKingEscapeOrMove: false,
+        skillName: t.skillCard1,
+        callout: `${t.skillCard1.toUpperCase()}!`,
+        checkLabel: t.vfxCheck,
+        checkmateLabel: t.vfxCheckmate,
+        bonkLabel: t.vfxBonk,
+        accentColor: '#FF9C24',
+        triggersShake: true,
+        timestamp: Date.now(),
+      });
+      setLastSkillLog(
+        plan.action === 'destroy'
+          ? t.scratchUsedDestroy(sq)
+          : t.scratchUsedPush(sq, plan.to)
+      );
+
+      soundEngine.playSkillCapture('q');
+      setIsShaking(true);
+      if (shakeTimerRef.current) window.clearTimeout(shakeTimerRef.current);
+      shakeTimerRef.current = window.setTimeout(() => setIsShaking(false), 360);
+      if (vfxTimerRef.current) window.clearTimeout(vfxTimerRef.current);
+      vfxTimerRef.current = window.setTimeout(() => {
+        setVfxEvent((cur) => (cur?.id === nextId ? null : cur));
+      }, 1250);
+
+      return true;
+    },
+    [scratchTargetMap, t]
+  );
+
+  const handleTriggerScratchCard = useCallback(() => {
+    if (isPlayerInteractionBlocked || !isArcade) return;
+    if (targetingScratch) {
+      setTargetingScratch(false);
+      soundEngine.playSelect();
+      return;
+    }
+    const caster = chessRef.current.turn();
+    if (arcadeEnergyRef.current[caster] < SCRATCH_COST) {
+      setLastSkillLog(t.needMoreEnergy(SCRATCH_COST));
+      soundEngine.playSelect();
+      return;
+    }
+    const targets = computeScratchTargets(chessRef.current, caster);
+    if (targets.size === 0) {
+      setLastSkillLog(t.scratchNoTargets);
+      soundEngine.playSelect();
+      return;
+    }
+    setSelectedSquare(null);
+    setTargetingScratch(true);
+    setLastSkillLog(t.scratchPickTarget);
+    soundEngine.playKingAura();
+  }, [isPlayerInteractionBlocked, isArcade, targetingScratch, t]);
+
+  const handleTriggerDoubleJumpCard = useCallback(() => {
+    if (isPlayerInteractionBlocked || !isArcade || doubleJumpArmed) return;
+    const c = chessRef.current;
+    const caster = c.turn();
+    if (c.inCheck()) {
+      setLastSkillLog(t.doubleJumpBlockedInCheck);
+      soundEngine.playSelect();
+      return;
+    }
+    if (arcadeEnergyRef.current[caster] < DOUBLE_JUMP_COST) {
+      setLastSkillLog(t.needMoreEnergy(DOUBLE_JUMP_COST));
+      soundEngine.playSelect();
+      return;
+    }
+    const nextEnergy = {
+      ...arcadeEnergyRef.current,
+      [caster]: Math.max(0, arcadeEnergyRef.current[caster] - DOUBLE_JUMP_COST),
+    };
+    setArcadeEnergy(nextEnergy);
+    setTargetingScratch(false);
+    setDoubleJumpArmed(true);
+    setLastSkillLog(t.doubleJumpArmed);
+    soundEngine.playKingAura();
+
+    if (configRef.current.mode === 'online') {
+      mpRef.current.send({
+        type: 'skill_double_jump',
+        caster,
+        energy: nextEnergy,
+      });
+    }
+  }, [isPlayerInteractionBlocked, isArcade, doubleJumpArmed, t]);
+
   const handleSquareClick = useCallback(
     (sq: Square) => {
       if (isPlayerInteractionBlocked) return;
+
+      // If Arcade Cakar Kilat targeting mode is active, cast on valid glowing orange square!
+      if (targetingScratch) {
+        if (executeScratchOnSquare(sq)) return;
+        setTargetingScratch(false);
+        return;
+      }
+
       const c = chessRef.current;
 
       if (selectedSquare) {
@@ -894,7 +1253,14 @@ export default function App() {
         setSelectedSquare(null);
       }
     },
-    [isPlayerInteractionBlocked, selectedSquare, legalMovesForSelected, executeMove]
+    [
+      isPlayerInteractionBlocked,
+      targetingScratch,
+      executeScratchOnSquare,
+      selectedSquare,
+      legalMovesForSelected,
+      executeMove,
+    ]
   );
 
   const handleUndo = useCallback(() => {
@@ -925,6 +1291,8 @@ export default function App() {
     setSelectedSquare(null);
     setHintMove(null);
     setPendingPromotion(null);
+    setTargetingScratch(false);
+    setDoubleJumpArmed(false);
     setVfxEvent(null);
     setLastMove(prevLast ? { from: prevLast.from, to: prevLast.to } : null);
     setLastSkillLog(t.moveUndone);
@@ -1087,6 +1455,7 @@ export default function App() {
           disabled={isPlayerInteractionBlocked}
           tapToAttackLabel={t.tapToAttack}
           hintMove={hintMove}
+          skillTargets={scratchTargetSquares}
           capturedByWhite={armyStats.capturedByWhite}
           capturedByBlack={armyStats.capturedByBlack}
           onSquareClick={handleSquareClick}
@@ -1119,7 +1488,7 @@ export default function App() {
             }
             isInCheck={!outcome && isInCheck && currentTurn === 'w'}
             hpPercent={armyStats.whiteHp}
-            energyPercent={armyStats.whiteEnergy}
+            energyPercent={isArcade ? arcadeEnergy.w : armyStats.whiteEnergy}
             score={armyStats.whiteScore}
             capturedPieces={armyStats.capturedByWhite}
             t={t}
@@ -1129,6 +1498,15 @@ export default function App() {
         {/* Center on desktop / Row 2 centered on mobile: Compact Match Timer + Utility Strip */}
         <div className="pointer-events-auto order-3 sm:order-2 w-full sm:w-auto flex flex-col items-center gap-1">
           <div className="flex items-center justify-center gap-1.5 bg-[#1C2E24]/85 backdrop-blur-[2px] px-2 py-1 rounded-full border-2 border-[#132018] shadow-lg max-w-full">
+            {isArcade && (
+              <span
+                className="inline-flex items-center px-1.5 py-0.5 rounded-full bg-gradient-to-b from-[#FFE259] to-[#F59E0B] text-[#3A2208] border border-[#3A2208]/40 font-display text-[9px] sm:text-[10px] tracking-wide leading-none"
+                title={t.rulesetArcadeHint}
+              >
+                ⚡
+              </span>
+            )}
+
             {isOnlineMatch && roomCode && (
               <span className="hidden sm:inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-[#2488D8] text-white font-display text-[10px] tracking-wider">
                 <Wifi className="w-3 h-3" />
@@ -1237,17 +1615,29 @@ export default function App() {
             </div>
           </div>
 
-          {/* Online Turn Status Pill ("GILIRAN LAWAN..." / "GILIRANMU!") */}
-          {isOnlineMatch && !outcome && !onlineDisconnected && (
-            <div
-              className={`px-3 py-0.5 rounded-full border border-black/70 font-display text-[10px] uppercase shadow-md ${
-                isWaitingForOnlineOpponent
-                  ? 'bg-[#FFE259] text-[#3A2204]'
-                  : 'bg-[#44AD26] text-white cartoon-text-shadow'
-              }`}
-            >
-              {isWaitingForOnlineOpponent ? t.opponentTurnBadge : t.yourTurnBadge}
+          {/* Online Turn Status Pill OR Arcade Active Skill Status Banner */}
+          {targetingScratch && !outcome ? (
+            <div className="px-3 py-0.5 rounded-full border border-black/80 bg-[#FF6B2B] text-white font-display text-[10px] uppercase shadow-md animate-pulse cartoon-text-shadow">
+              {t.scratchPickTarget}
             </div>
+          ) : doubleJumpArmed && !outcome ? (
+            <div className="px-3 py-0.5 rounded-full border border-black/80 bg-[#24A8FF] text-white font-display text-[10px] uppercase shadow-md animate-pulse cartoon-text-shadow">
+              {t.doubleJumpArmed}
+            </div>
+          ) : (
+            isOnlineMatch &&
+            !outcome &&
+            !onlineDisconnected && (
+              <div
+                className={`px-3 py-0.5 rounded-full border border-black/70 font-display text-[10px] uppercase shadow-md ${
+                  isWaitingForOnlineOpponent
+                    ? 'bg-[#FFE259] text-[#3A2204]'
+                    : 'bg-[#44AD26] text-white cartoon-text-shadow'
+                }`}
+              >
+                {isWaitingForOnlineOpponent ? t.opponentTurnBadge : t.yourTurnBadge}
+              </div>
+            )
           )}
         </div>
 
@@ -1275,7 +1665,7 @@ export default function App() {
             }
             isInCheck={!outcome && isInCheck && currentTurn === 'b'}
             hpPercent={armyStats.blackHp}
-            energyPercent={armyStats.blackEnergy}
+            energyPercent={isArcade ? arcadeEnergy.b : armyStats.blackEnergy}
             score={armyStats.blackScore}
             capturedPieces={armyStats.capturedByBlack}
             t={t}
@@ -1322,9 +1712,24 @@ export default function App() {
             canUndo={moveRecords.length > 0 && !isOnlineMatch}
             hideUndo={isOnlineMatch}
             disabled={Boolean(outcome) || onlineDisconnected}
+            isMyTurn={!isPlayerInteractionBlocked}
+            isArcade={isArcade}
+            currentEnergy={
+              isArcade
+                ? currentTurn === 'w'
+                  ? arcadeEnergy.w
+                  : arcadeEnergy.b
+                : currentTurn === 'w'
+                  ? armyStats.whiteEnergy
+                  : armyStats.blackEnergy
+            }
+            targetingScratch={targetingScratch}
+            doubleJumpArmed={doubleJumpArmed}
             hasSkillReady={
               !isWaitingForOnlineOpponent &&
-              (currentTurn === 'w' ? armyStats.whiteEnergy : armyStats.blackEnergy) >= 60
+              (isArcade
+                ? (currentTurn === 'w' ? arcadeEnergy.w : arcadeEnergy.b) >= SCRATCH_COST
+                : (currentTurn === 'w' ? armyStats.whiteEnergy : armyStats.blackEnergy) >= 60)
             }
             onUndo={handleUndo}
             onSurrender={handleSurrender}
@@ -1333,6 +1738,8 @@ export default function App() {
               setShowRoster(true);
             }}
             onTriggerSkillHint={handleTriggerSkillHint}
+            onTriggerScratch={handleTriggerScratchCard}
+            onTriggerDoubleJump={handleTriggerDoubleJumpCard}
             onTriggerEmote={handleEmoteClick}
           />
         </div>

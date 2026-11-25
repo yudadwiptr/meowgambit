@@ -1,6 +1,8 @@
 import type { Color, PieceSymbol, Square } from 'chess.js';
 
 export type GameMode = 'bot' | 'local' | 'online';
+export type GameRuleset = 'classic' | 'arcade';
+export type ActiveSkillType = 'scratch' | 'double_jump';
 export type Difficulty = 'easy' | 'medium' | 'hard';
 export type TimeControl = 'blitz' | 'rapid' | 'unlimited';
 export type EmoteKey = 'meow' | 'hiss' | 'woof' | 'gg';
@@ -18,7 +20,7 @@ export type RematchState = 'none' | 'offered_by_me' | 'offered_by_opponent';
 
 export type OnlineMessage =
   | { type: 'hello' }
-  | { type: 'start'; timeControl: TimeControl }
+  | { type: 'start'; timeControl: TimeControl; ruleset: GameRuleset }
   | {
       type: 'move';
       from: Square;
@@ -26,6 +28,22 @@ export type OnlineMessage =
       promotion?: 'q' | 'r' | 'b' | 'n';
       fen: string;
       clocks?: { w: number | null; b: number | null };
+      energy?: { w: number; b: number };
+      doubleJumpTriggered?: boolean;
+    }
+  | {
+      type: 'skill_scratch';
+      caster: Color;
+      targetSq: Square;
+      pushedTo?: Square;
+      destroyed?: boolean;
+      fen: string;
+      energy: { w: number; b: number };
+    }
+  | {
+      type: 'skill_double_jump';
+      caster: Color;
+      energy: { w: number; b: number };
     }
   | { type: 'emote'; emote: EmoteKey; color: Color }
   | { type: 'surrender'; loserColor: Color }
@@ -35,6 +53,7 @@ export type OnlineMessage =
 
 export interface GameConfig {
   mode: GameMode;
+  ruleset: GameRuleset;
   difficulty: Difficulty;
   timeControl: TimeControl;
   playerColor: Color; // Used in 'bot' mode

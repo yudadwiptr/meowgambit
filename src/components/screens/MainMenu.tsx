@@ -87,6 +87,7 @@ export const MainMenu: React.FC<MainMenuProps> = ({
   }, []);
 
   const updateMode = (mode: GameMode) => onChangeConfig({ ...config, mode });
+  const updateRuleset = (ruleset: 'classic' | 'arcade') => onChangeConfig({ ...config, ruleset });
   const updateDifficulty = (difficulty: Difficulty) => onChangeConfig({ ...config, difficulty });
   const updateTimeControl = (timeControl: TimeControl) => onChangeConfig({ ...config, timeControl });
   const updatePlayerColor = (playerColor: Color) => onChangeConfig({ ...config, playerColor });
@@ -222,6 +223,54 @@ export const MainMenu: React.FC<MainMenuProps> = ({
               </button>
             </div>
           </div>
+
+          {/* 1B. RULESET TOGGLE: KLASIK | ARCADE ⚡ (Shown for Bot, Local, and Online Host) */}
+          {(config.mode !== 'online' || onlineTab === 'create') && (
+            <div className="rounded-2xl bg-[#6B4E3B]/92 border-2 border-[#5C3A21] p-2 shadow-inner">
+              <div className="flex items-center justify-between gap-2 mb-1 px-0.5">
+                <span className="text-[10px] font-display uppercase text-[#FFF3D1] cartoon-text-shadow">
+                  {t.rulesetLabel}
+                </span>
+                <span className="text-[9.5px] font-bold text-[#FFE8A3] truncate">
+                  {config.ruleset === 'arcade' ? t.rulesetArcadeHint : t.rulesetClassicHint}
+                </span>
+              </div>
+              <div className="grid grid-cols-2 gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => updateRuleset('classic')}
+                  className={`casual-btn py-1.5 px-2 font-display text-xs uppercase ${
+                    config.ruleset === 'classic' ? 'casual-btn-blue text-white' : 'casual-btn-cream'
+                  }`}
+                >
+                  <span
+                    className={
+                      config.ruleset === 'classic' ? 'cartoon-text-shadow-bold text-white' : ''
+                    }
+                  >
+                    {t.rulesetClassic}
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => updateRuleset('arcade')}
+                  className={`casual-btn py-1.5 px-2 font-display text-xs uppercase ${
+                    config.ruleset === 'arcade'
+                      ? 'bg-gradient-to-b from-[#FFB830] to-[#E65C19] text-white'
+                      : 'casual-btn-cream'
+                  }`}
+                >
+                  <span
+                    className={
+                      config.ruleset === 'arcade' ? 'cartoon-text-shadow-bold text-white' : ''
+                    }
+                  >
+                    {t.rulesetArcade}
+                  </span>
+                </button>
+              </div>
+            </div>
+          )}
 
           {/* 2. MODE-SPECIFIC PANEL */}
           {config.mode === 'online' ? (

@@ -25,6 +25,7 @@ interface ChessBoardProps {
   disabled: boolean;
   tapToAttackLabel: string;
   hintMove?: { from: Square; to: Square } | null;
+  skillTargets?: Square[];
   capturedByWhite: PieceSymbol[];
   capturedByBlack: PieceSymbol[];
   onSquareClick: (sq: Square) => void;
@@ -90,10 +91,12 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
   disabled,
   tapToAttackLabel,
   hintMove,
+  skillTargets = [],
   capturedByWhite,
   capturedByBlack,
   onSquareClick,
 }) => {
+  const skillTargetSet = useMemo(() => new Set<Square>(skillTargets), [skillTargets]);
   const isFlat = boardView === 'flat';
   const stage = useMemo(() => getStageMetrics(boardView), [boardView]);
 
@@ -500,6 +503,7 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
                 const isLastFrom = lastMove?.from === sq;
                 const isLastTo = lastMove?.to === sq;
                 const isHintSquare = hintMove?.from === sq || hintMove?.to === sq;
+                const isSkillTarget = skillTargetSet.has(sq);
 
                 return (
                   <g
@@ -614,6 +618,41 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
                             fill="none"
                             stroke="#FFFFFF"
                             strokeWidth="2.6"
+                            strokeDasharray="6 4"
+                          />
+                        )}
+                      </g>
+                    )}
+
+                    {/* Arcade Active Skill Target Highlight (Glowing Fiery Orange-Gold) */}
+                    {isSkillTarget && (
+                      <g className="pointer-events-none animate-tile-glow">
+                        <polygon
+                          points={points}
+                          fill="rgba(255, 110, 26, 0.72)"
+                          stroke="#FFF394"
+                          strokeWidth="3.4"
+                          filter="url(#glow-yellow)"
+                        />
+                        {isFlat ? (
+                          <circle
+                            cx={center.x}
+                            cy={center.y}
+                            r="21"
+                            fill="none"
+                            stroke="#FFFFFF"
+                            strokeWidth="2.8"
+                            strokeDasharray="6 4"
+                          />
+                        ) : (
+                          <ellipse
+                            cx={center.x}
+                            cy={center.y}
+                            rx="24"
+                            ry="13.5"
+                            fill="none"
+                            stroke="#FFFFFF"
+                            strokeWidth="2.8"
                             strokeDasharray="6 4"
                           />
                         )}

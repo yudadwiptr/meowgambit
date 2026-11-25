@@ -21,6 +21,19 @@ export interface TranslationPack {
   skillCodexBtn: string;
   codexShort: string;
   gameMode: string;
+  rulesetLabel: string;
+  rulesetClassic: string;
+  rulesetArcade: string;
+  rulesetClassicHint: string;
+  rulesetArcadeHint: string;
+  scratchPickTarget: string;
+  scratchNoTargets: string;
+  scratchUsedDestroy: (sq: string) => string;
+  scratchUsedPush: (from: string, to: string) => string;
+  doubleJumpArmed: string;
+  doubleJumpExtraTurn: string;
+  doubleJumpBlockedInCheck: string;
+  needMoreEnergy: (cost: number) => string;
   vsBot: string;
   local2p: string;
   onlineMabar: string;
@@ -153,6 +166,20 @@ export const TRANSLATIONS: Record<Language, TranslationPack> = {
     skillCodexBtn: 'JURUS',
     codexShort: 'JURUS',
     gameMode: 'MODE PERMAINAN',
+    rulesetLabel: 'ATURAN MAIN',
+    rulesetClassic: 'KLASIK',
+    rulesetArcade: 'ARCADE ⚡',
+    rulesetClassicHint: '100% catur murni tanpa jurus aktif',
+    rulesetArcadeHint: 'Energi terisi untuk Cakar Kilat (60⚡) & Lompat Ganda (100⚡)',
+    scratchPickTarget: 'CAKAR KILAT! KETUK BIDAK LAWAN BERCAHAYA ORANYE!',
+    scratchNoTargets: 'Tidak ada bidak lawan yang bisa ditebas/didorong saat ini!',
+    scratchUsedDestroy: (sq) => `CAKAR KILAT! PION LAWAN DI ${sq.toUpperCase()} HANCUR!`,
+    scratchUsedPush: (from, to) =>
+      `CAKAR KILAT! BIDAK ${from.toUpperCase()} DIDORONG KE ${to.toUpperCase()}!`,
+    doubleJumpArmed: 'LOMPAT GANDA AKTIF! LANGKAH BERIKUTNYA DAPAT 1× BONUS GILIRAN!',
+    doubleJumpExtraTurn: '⚡ LOMPAT GANDA! AMBIL LANGKAH BONUSMU SEKARANG!',
+    doubleJumpBlockedInCheck: 'Tidak bisa pakai Lompat Ganda saat sedang Skak!',
+    needMoreEnergy: (cost) => `Energi belum cukup! Butuh ${cost}⚡.`,
     vsBot: 'LAWAN BOT',
     local2p: '2P LOKAL',
     onlineMabar: 'ONLINE MABAR',
@@ -386,6 +413,20 @@ export const TRANSLATIONS: Record<Language, TranslationPack> = {
     skillCodexBtn: 'SKILL CODEX (12)',
     codexShort: 'CODEX',
     gameMode: 'GAME MODE',
+    rulesetLabel: 'RULESET',
+    rulesetClassic: 'CLASSIC',
+    rulesetArcade: 'ARCADE ⚡',
+    rulesetClassicHint: '100% pure classic chess rules',
+    rulesetArcadeHint: 'Charge energy for Scratch Burst (60⚡) & Double Jump (100⚡)',
+    scratchPickTarget: 'SCRATCH BURST! TAP A GLOWING ORANGE ENEMY PIECE!',
+    scratchNoTargets: 'No valid enemy piece to scratch or push right now!',
+    scratchUsedDestroy: (sq) => `SCRATCH BURST! ENEMY PAWN ON ${sq.toUpperCase()} SLASHED!`,
+    scratchUsedPush: (from, to) =>
+      `SCRATCH BURST! ENEMY ON ${from.toUpperCase()} PUSHED TO ${to.toUpperCase()}!`,
+    doubleJumpArmed: 'DOUBLE JUMP ARMED! NEXT MOVE GRANTS A BONUS TURN!',
+    doubleJumpExtraTurn: '⚡ DOUBLE JUMP! TAKE YOUR BONUS MOVE NOW!',
+    doubleJumpBlockedInCheck: 'Cannot activate Double Jump while in Check!',
+    needMoreEnergy: (cost) => `Not enough Energy! Need ${cost}⚡.`,
     vsBot: 'VS BOT',
     local2p: '2P LOCAL',
     onlineMabar: 'ONLINE 1V1',
