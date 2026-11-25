@@ -1,6 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 import type { SkillVfxEvent } from '../../types/game';
-import { ARENA_H, ARENA_W, squareToBoardPoint, type BoardView } from '../board/isometric';
+import { getStageMetrics, squareToBoardPoint, type BoardView } from '../board/isometric';
 
 interface SkillVfxCanvasProps {
   event: SkillVfxEvent | null;
@@ -37,7 +37,9 @@ function drawSlantedComicText(
   x: number,
   y: number,
   progress: number,
-  isAlert: boolean
+  isAlert: boolean,
+  stageW: number,
+  stageH: number
 ) {
   const pop =
     progress < 0.16
@@ -48,8 +50,8 @@ function drawSlantedComicText(
   const alpha = progress > 0.76 ? Math.max(0, 1 - (progress - 0.76) / 0.24) : 1;
   const floatY = y - progress * 24;
 
-  const clampedX = Math.max(180, Math.min(ARENA_W - 180, x));
-  const clampedY = Math.max(90, Math.min(ARENA_H - 72, floatY));
+  const clampedX = Math.max(180, Math.min(stageW - 180, x));
+  const clampedY = Math.max(90, Math.min(stageH - 72, floatY));
 
   ctx.save();
   ctx.globalAlpha = alpha;
@@ -144,9 +146,8 @@ function drawBlueGoldSlashArc(
 }
 
 /**
- * High-DPI HTML5 Canvas 1.2s non-blocking VFX Engine mounted inside the exact same
- * fixed-aspect stage container as /arena-bg.png and the 8x8 SVG polygon overlay,
- * guaranteeing 1:1 pixel alignment at every viewport size.
+ * High-DPI HTML5 Canvas 1.2s VFX Engine mounted directly inside the unified fixed-aspect
+ * stage container for both /arena-bg.png (iso) and /arena-bg-flat.png (flat).
  */
 export const SkillVfxCanvas: React.FC<SkillVfxCanvasProps> = ({
   event,
@@ -172,6 +173,7 @@ export const SkillVfxCanvas: React.FC<SkillVfxCanvasProps> = ({
       return;
     }
 
+    const stage = getStageMetrics(boardView);
     const rect = canvas.getBoundingClientRect();
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
     const width = Math.max(1, rect.width);
@@ -179,10 +181,8 @@ export const SkillVfxCanvas: React.FC<SkillVfxCanvasProps> = ({
     canvas.width = Math.round(width * dpr);
     canvas.height = Math.round(height * dpr);
 
-    // Since canvas sits inside the exact 1456x720 aspect-locked stage container,
-    // scaleX === scaleY directly!
-    const scaleX = width / ARENA_W;
-    const scaleY = height / ARENA_H;
+    const scaleX = width / stage.w;
+    const scaleY = height / stage.h;
 
     const fromPt = squareToBoardPoint(event.from, flipped, boardView);
     const toPt = squareToBoardPoint(event.to, flipped, boardView);
@@ -229,11 +229,10 @@ export const SkillVfxCanvas: React.FC<SkillVfxCanvasProps> = ({
 
       ctx.save();
       ctx.setTransform(dpr * scaleX, 0, 0, dpr * scaleY, 0, 0);
-      ctx.clearRect(0, 0, ARENA_W, ARENA_H);
+      ctx.clearRect(0, 0, stage.w, stage.h);
 
       const fade = Math.max(0, 1 - t);
 
-      // 1. Expanding Ground Shockwave Ring
       if (t < 0.75) {
         const ringP = t / 0.75;
         ctx.save();
@@ -243,7 +242,7 @@ export const SkillVfxCanvas: React.FC<SkillVfxCanvasProps> = ({
           toPt.x,
           toPt.y + 2,
           26 + ringP * 82,
-          13 + ringP * 42,
+          (boardView === 'flat' ? 26 + ringP * 82 : 13 + ringP * 42),
           0,
           0,
           Math.PI * 2
@@ -254,7 +253,6 @@ export const SkillVfxCanvas: React.FC<SkillVfxCanvasProps> = ({
         ctx.restore();
       }
 
-      // 2. Unit-Specific Beam / Leap Accent
       if (event.pieceType === 'b' && (event.isCapture || event.isCheck)) {
         const beamP = Math.min(1, t / 0.28);
         const beamFade = t > 0.28 ? Math.max(0, 1 - (t - 0.28) / 0.5) : 1;
@@ -294,7 +292,6 @@ export const SkillVfxCanvas: React.FC<SkillVfxCanvasProps> = ({
         }
       }
 
-      // 3. Cartoon Dust Puffs
       dusts.forEach((d) => {
         d.x += d.vx;
         d.y += d.vy;
@@ -316,7 +313,6 @@ export const SkillVfxCanvas: React.FC<SkillVfxCanvasProps> = ({
         ctx.restore();
       });
 
-      // 4. Sweeping Blue-Gold Curved Energy Slash
       if (!event.isKingEscapeOrMove || event.isCapture || event.isCheck) {
         drawBlueGoldSlashArc(ctx, toPt.x, toPt.y, t, flipDir);
       } else {
@@ -326,7 +322,15 @@ export const SkillVfxCanvas: React.FC<SkillVfxCanvasProps> = ({
           ctx.save();
           ctx.globalAlpha = 1 - p;
           ctx.beginPath();
-          ctx.ellipse(toPt.x, toPt.y - 6, 24 + p * 86, 12 + p * 44, 0, 0, Math.PI * 2);
+          ctx.ellipse(
+            toPt.x,
+            toPt.y - 6,
+            24 + p * 86,
+            boardView === 'flat' ? 24 + p * 86 : 12 + p * 44,
+            0,
+            0,
+            Math.PI * 2
+          );
           ctx.strokeStyle = event.pieceColor === 'w' ? '#FFD93D' : '#38E8FF';
           ctx.lineWidth = 6;
           ctx.stroke();
@@ -334,7 +338,6 @@ export const SkillVfxCanvas: React.FC<SkillVfxCanvasProps> = ({
         });
       }
 
-      // 5. Flying Energy Sparks
       if (!event.isKingEscapeOrMove) {
         sparks.forEach((s) => {
           s.x += s.vx;
@@ -367,7 +370,6 @@ export const SkillVfxCanvas: React.FC<SkillVfxCanvasProps> = ({
         });
       }
 
-      // 6. Slanted Comic "SLASH!" / "SKAK!!" / "SKAKMAT!!" Typography
       const mainLabel = event.isCheckmate
         ? event.checkmateLabel
         : event.isCheck
@@ -381,7 +383,9 @@ export const SkillVfxCanvas: React.FC<SkillVfxCanvasProps> = ({
         toPt.x + 8,
         toPt.y - 50,
         t,
-        event.isCheck || event.isCheckmate
+        event.isCheck || event.isCheckmate,
+        stage.w,
+        stage.h
       );
 
       ctx.restore();

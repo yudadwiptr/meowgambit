@@ -1,4 +1,4 @@
-const CACHE_NAME = 'meowgambit-v5';
+const CACHE_NAME = 'meowgambit-v6';
 const ASSETS_TO_CACHE = [
   '/',
   '/index.html',
@@ -6,6 +6,7 @@ const ASSETS_TO_CACHE = [
   '/logo.png',
   '/lobby-bg.png',
   '/arena-bg.png',
+  '/arena-bg-flat.png',
   '/favicon.png',
   '/icon-192.png',
   '/icon-512.png',

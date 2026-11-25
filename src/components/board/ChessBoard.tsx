@@ -4,16 +4,9 @@ import type { ActiveEmote, SkillVfxEvent } from '../../types/game';
 import { AnimalPiece } from '../pieces/AnimalPiece';
 import { SkillVfxCanvas } from '../vfx/SkillVfxCanvas';
 import {
-  ARENA_H,
-  ARENA_NATIVE_H,
-  ARENA_NATIVE_W,
-  ARENA_W,
-  FLAT_ORIGIN_X,
-  FLAT_ORIGIN_Y,
-  FLAT_TILE,
-  flatGridCenter,
-  isoGridCenter,
-  isoTilePoints,
+  boardGridCenter,
+  boardTilePoints,
+  getStageMetrics,
   squareToBoardPoint,
   type BoardView,
 } from './isometric';
@@ -51,16 +44,16 @@ function buildSurfaceArrow(from: { x: number; y: number }, to: { x: number; y: n
   const px = -uy;
   const py = ux;
 
-  const startOffset = 15;
-  const endOffset = 13;
+  const startOffset = 14;
+  const endOffset = 12;
   const sx = from.x + ux * startOffset;
   const sy = from.y + uy * startOffset;
   const ex = to.x - ux * endOffset;
   const ey = to.y - uy * endOffset;
 
-  const headLen = Math.min(22, dist * 0.34);
-  const shaftW = 6;
-  const headW = 14;
+  const headLen = Math.min(20, dist * 0.34);
+  const shaftW = 5.5;
+  const headW = 13;
 
   const bx = ex - ux * headLen;
   const by = ey - uy * headLen;
@@ -77,11 +70,11 @@ function buildSurfaceArrow(from: { x: number; y: number }, to: { x: number; y: n
 }
 
 /**
- * Single Unified Fixed-Aspect Arena Stage (`2912 / 1440`):
- * Wraps `/arena-bg.png`, the 4-corner bilinear SVG `<polygon>` tile highlights,
- * standing chibi pieces anchored at their feet (`translate(-50%, -85%)`),
- * captured benches, emotes, and HTML5 Canvas VFX inside ONE exact aspect-locked
- * stage container so (x%, y%) coordinates NEVER drift on any screen resize!
+ * Unified Fixed-Aspect Arena Stage for BOTH 2.5D (/arena-bg.png) and RATA (/arena-bg-flat.png):
+ * - Zero blur, zero manual CSS board — uses the authentic grass tiles of both PNG assets directly!
+ * - Background image, 4-corner bilinear SVG <polygon> overlay, foot-anchored standing chibi
+ *   pieces, captured benches, emotes, and Canvas VFX all live inside ONE exact aspect-locked
+ *   stage container so (x%, y%) NEVER drifts at any screen size!
  */
 export const ChessBoard: React.FC<ChessBoardProps> = ({
   chess,
@@ -102,45 +95,36 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
   onSquareClick,
 }) => {
   const isFlat = boardView === 'flat';
-  const nativeRatio = ARENA_NATIVE_W / ARENA_NATIVE_H; // 2.0222...
+  const stage = useMemo(() => getStageMetrics(boardView), [boardView]);
+
+  const computeStageDims = (vw: number, vh: number, view: BoardView) => {
+    const m = getStageMetrics(view);
+    const ratio = m.nativeRatio;
+    if (vw / vh >= 1.2) {
+      // Full-bleed centered cover on desktop & landscape (zero black bars!)
+      const w = Math.max(vw, vh * ratio);
+      return { w, h: w / ratio };
+    }
+    // On mobile portrait, zoom the fixed-aspect stage so the grass chessboard fills ~94% screen width
+    // (Iso board occupies ~52% of image width; Flat board occupies ~33% of image width)
+    const targetZoomW = view === 'flat' ? vw * 2.72 : vw * 1.84;
+    const w = Math.min(targetZoomW, vh * ratio);
+    return { w, h: w / ratio };
+  };
 
   const [stageDims, setStageDims] = useState<{ w: number; h: number }>(() => {
-    if (typeof window === 'undefined') return { w: ARENA_W, h: ARENA_H };
-    const vw = window.innerWidth;
-    const vh = window.innerHeight;
-    if (vw / vh >= 1.25) {
-      // Cover viewport cleanly on desktop & landscape without black bars
-      const w = Math.max(vw, vh * nativeRatio);
-      return { w, h: w / nativeRatio };
-    }
-    // On mobile portrait, size the fixed-aspect stage so the 52%-wide chessboard fills ~96% of screen width!
-    const w = Math.min(vw * 1.84, vh * nativeRatio);
-    return { w, h: w / nativeRatio };
+    if (typeof window === 'undefined') return { w: stage.w, h: stage.h };
+    return computeStageDims(window.innerWidth, window.innerHeight, boardView);
   });
 
   useEffect(() => {
-    const updateSize = () => {
-      const vw = window.innerWidth;
-      const vh = window.innerHeight;
-      if (isFlat) {
-        // In flat mode, ensure the 528px centered board fits comfortably inside viewport
-        const scale = Math.min(vw / 740, vh / 640);
-        const w = ARENA_W * scale;
-        setStageDims({ w, h: w / nativeRatio });
-        return;
-      }
-      if (vw / vh >= 1.25) {
-        const w = Math.max(vw, vh * nativeRatio);
-        setStageDims({ w, h: w / nativeRatio });
-      } else {
-        const w = Math.min(vw * 1.84, vh * nativeRatio);
-        setStageDims({ w, h: w / nativeRatio });
-      }
+    const onResize = () => {
+      setStageDims(computeStageDims(window.innerWidth, window.innerHeight, boardView));
     };
-    updateSize();
-    window.addEventListener('resize', updateSize);
-    return () => window.removeEventListener('resize', updateSize);
-  }, [isFlat, nativeRatio]);
+    onResize();
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, [boardView]);
 
   const boardMatrix = useMemo(() => {
     void fen;
@@ -213,15 +197,15 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
     if (!vfxEvent || (!vfxEvent.isCapture && !vfxEvent.isCheck)) return null;
     const f = squareToBoardPoint(vfxEvent.from, flipped, boardView);
     const t = squareToBoardPoint(vfxEvent.to, flipped, boardView);
-    const scaleX = stageDims.w / ARENA_W;
-    const scaleY = stageDims.h / ARENA_H;
+    const scaleX = stageDims.w / stage.w;
+    const scaleY = stageDims.h / stage.h;
     return {
       targetSq: vfxEvent.to,
       dx: (f.x - t.x) * scaleX,
       dy: (f.y - t.y) * scaleY,
       id: vfxEvent.id,
     };
-  }, [vfxEvent, flipped, boardView, stageDims.w, stageDims.h]);
+  }, [vfxEvent, flipped, boardView, stageDims.w, stageDims.h, stage.w, stage.h]);
 
   const surfaceArrows = useMemo(() => {
     if (!selectedSquare) return [];
@@ -250,37 +234,30 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
     return arrows;
   }, [selectedSquare, legalMoves, flipped, boardView]);
 
-  const flatW = FLAT_TILE * 8;
-  const flatH = FLAT_TILE * 8;
-
-  // Captured pieces sideline benches sitting neatly on the outer grass lawns
+  // Captured pieces sideline benches positioned neatly on the outer lawns of each PNG!
   const leftBenchCoords = useMemo(
     () =>
       capturedByWhite.slice(0, 12).map((pieceType, idx) => {
         if (isFlat) {
           const col = idx % 2;
           const row = Math.floor(idx / 2);
-          const x = FLAT_ORIGIN_X - 66 - col * 52;
-          const y = FLAT_ORIGIN_Y + 95 + row * 72;
           return {
             pieceType,
-            xPct: (x / ARENA_W) * 100,
-            yPct: (y / ARENA_H) * 100,
+            xPct: 26.8 - col * 4.4,
+            yPct: 30 + row * 8.6,
             key: `capw-${idx}-${pieceType}`,
           };
         }
         const row = Math.floor(idx / 5);
         const col = idx % 5;
-        const x = 280 - row * 48 + col * 52;
-        const y = 472 + row * 34 + col * 30;
         return {
           pieceType,
-          xPct: (x / ARENA_W) * 100,
-          yPct: (y / ARENA_H) * 100,
+          xPct: ((280 - row * 48 + col * 52) / stage.w) * 100,
+          yPct: ((472 + row * 34 + col * 30) / stage.h) * 100,
           key: `capw-${idx}-${pieceType}`,
         };
       }),
-    [capturedByWhite, isFlat]
+    [capturedByWhite, isFlat, stage.w, stage.h]
   );
 
   const rightBenchCoords = useMemo(
@@ -289,51 +266,31 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
         if (isFlat) {
           const col = idx % 2;
           const row = Math.floor(idx / 2);
-          const x = FLAT_ORIGIN_X + flatW + 66 + col * 52;
-          const y = FLAT_ORIGIN_Y + 95 + row * 72;
           return {
             pieceType,
-            xPct: (x / ARENA_W) * 100,
-            yPct: (y / ARENA_H) * 100,
+            xPct: 73.2 + col * 4.4,
+            yPct: 30 + row * 8.6,
             key: `capb-${idx}-${pieceType}`,
           };
         }
         const row = Math.floor(idx / 5);
         const col = idx % 5;
-        const x = 1175 + row * 48 - col * 52;
-        const y = 472 + row * 34 + col * 30;
         return {
           pieceType,
-          xPct: (x / ARENA_W) * 100,
-          yPct: (y / ARENA_H) * 100,
+          xPct: ((1175 + row * 48 - col * 52) / stage.w) * 100,
+          yPct: ((472 + row * 34 + col * 30) / stage.h) * 100,
           key: `capb-${idx}-${pieceType}`,
         };
       }),
-    [capturedByBlack, isFlat, flatW]
+    [capturedByBlack, isFlat, stage.w, stage.h]
   );
 
   return (
-    <div
-      className="relative w-full h-full overflow-hidden flex items-center justify-center bg-[#23422D] select-none"
-      style={
-        isFlat
-          ? {
-              backgroundImage: "url('/arena-bg.png')",
-              backgroundSize: 'cover',
-              backgroundPosition: 'center',
-            }
-          : undefined
-      }
-    >
-      {/* In Flat mode, soft dark blur behind straight board */}
-      {isFlat && (
-        <div className="absolute inset-0 bg-[#183022]/55 backdrop-blur-[3px] pointer-events-none" />
-      )}
-
+    <div className="relative w-full h-full overflow-hidden flex items-center justify-center bg-[#23422D] select-none">
       {/* =================================================================
-          SINGLE FIXED-ASPECT STAGE CONTAINER (2912 x 1440 = 1456 x 720)
-          Image + SVG Polygon Grid + Foot-Anchored Pieces + VFX Canvas
-          all share the EXACT SAME (x%, y%) coordinate space — ZERO DRIFT!
+          SINGLE FIXED-ASPECT STAGE CONTAINER (Matches native image ratio!)
+          Background PNG + 4-Corner Bilinear SVG <polygon> Grid +
+          Foot-Anchored Chibi Pieces + Canvas VFX — ZERO DRIFT ON RESIZE!
          ================================================================= */}
       <div
         className={`relative shrink-0 ${isShaking ? 'animate-board-shake' : ''}`}
@@ -342,19 +299,17 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
           height: `${stageDims.h}px`,
         }}
       >
-        {/* 1. Authentic /arena-bg.png locked 1:1 to stage container */}
-        {!isFlat && (
-          <img
-            src="/arena-bg.png"
-            alt=""
-            draggable={false}
-            className="absolute inset-0 w-full h-full object-fill pointer-events-none select-none block"
-          />
-        )}
+        {/* 1. Authentic Arena Artwork (/arena-bg.png or /arena-bg-flat.png — crisp, zero blur!) */}
+        <img
+          src={stage.imageUrl}
+          alt=""
+          draggable={false}
+          className="absolute inset-0 w-full h-full object-fill pointer-events-none select-none block"
+        />
 
-        {/* 2. Interactive 8x8 SVG Polygon Overlay (Bilinear 4-Corner Highlights & Arrows) */}
+        {/* 2. Transparent 8x8 Bilinear SVG <polygon> Interactive Overlay */}
         <svg
-          viewBox={`0 0 ${ARENA_W} ${ARENA_H}`}
+          viewBox={`0 0 ${stage.w} ${stage.h}`}
           preserveAspectRatio="none"
           className="absolute inset-0 w-full h-full block z-10"
           xmlns="http://www.w3.org/2000/svg"
@@ -374,14 +329,6 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
                 <feMergeNode in="SourceGraphic" />
               </feMerge>
             </filter>
-            <linearGradient id="tile-light" x1="0%" y1="0%" x2="100%" y2="100%">
-              <stop offset="0%" stopColor="#9FE866" />
-              <stop offset="100%" stopColor="#82CE4F" />
-            </linearGradient>
-            <linearGradient id="tile-dark" x1="0%" y1="0%" x2="100%" y2="100%">
-              <stop offset="0%" stopColor="#5AAE5D" />
-              <stop offset="100%" stopColor="#468F4A" />
-            </linearGradient>
             <linearGradient id="yellow-neon" x1="0%" y1="0%" x2="100%" y2="100%">
               <stop offset="0%" stopColor="#FFF78A" />
               <stop offset="100%" stopColor="#FFD83B" />
@@ -392,284 +339,93 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
             </linearGradient>
           </defs>
 
-          {isFlat ? (
-            <g>
-              <rect
-                x={FLAT_ORIGIN_X - 18}
-                y={FLAT_ORIGIN_Y - 18}
-                width={flatW + 36}
-                height={flatH + 46}
-                rx="24"
-                fill="#5C4432"
-                stroke="#1E1813"
-                strokeWidth="3.5"
-              />
-              <rect
-                x={FLAT_ORIGIN_X - 14}
-                y={FLAT_ORIGIN_Y - 14}
-                width={flatW + 28}
-                height={flatH + 28}
-                rx="18"
-                fill="#97A1A4"
-                stroke="#1E1813"
-                strokeWidth="3"
-              />
-              <rect
-                x={FLAT_ORIGIN_X - 5}
-                y={FLAT_ORIGIN_Y - 5}
-                width={flatW + 10}
-                height={flatH + 10}
-                rx="9"
-                fill="#4B9443"
-                stroke="#1C331A"
-                strokeWidth="2"
-              />
+          <g>
+            {Array.from({ length: 8 }, (_, vr) =>
+              Array.from({ length: 8 }, (_, vc) => {
+                const boardRow = flipped ? 7 - vr : vr;
+                const boardCol = flipped ? 7 - vc : vc;
+                const sq = `${FILES[boardCol]}${RANKS[boardRow]}` as Square;
+                const points = boardTilePoints(vr, vc, boardView);
+                const center = boardGridCenter(vr, vc, boardView);
 
-              {Array.from({ length: 8 }, (_, vr) =>
-                Array.from({ length: 8 }, (_, vc) => {
-                  const boardRow = flipped ? 7 - vr : vr;
-                  const boardCol = flipped ? 7 - vc : vc;
-                  const sq = `${FILES[boardCol]}${RANKS[boardRow]}` as Square;
-                  const isLight = (boardRow + boardCol) % 2 === 0;
-                  const x = FLAT_ORIGIN_X + vc * FLAT_TILE;
-                  const y = FLAT_ORIGIN_Y + vr * FLAT_TILE;
-                  const center = flatGridCenter(vr, vc);
+                const isSelected = selectedSquare === sq;
+                const legalInfo = legalTargetMap.get(sq);
+                const isCheckedKing = checkedKingSquare === sq;
+                const isLastFrom = lastMove?.from === sq;
+                const isLastTo = lastMove?.to === sq;
+                const isHintSquare = hintMove?.from === sq || hintMove?.to === sq;
 
-                  const isSelected = selectedSquare === sq;
-                  const legalInfo = legalTargetMap.get(sq);
-                  const isCheckedKing = checkedKingSquare === sq;
-                  const isLastFrom = lastMove?.from === sq;
-                  const isLastTo = lastMove?.to === sq;
-                  const isHintSquare = hintMove?.from === sq || hintMove?.to === sq;
+                return (
+                  <g
+                    key={sq}
+                    data-square={sq}
+                    onClick={() => !disabled && onSquareClick(sq)}
+                    className={disabled ? 'cursor-default' : 'cursor-pointer'}
+                  >
+                    {/* Transparent exact-fit bilinear polygon directly over PNG grass tile */}
+                    <polygon
+                      points={points}
+                      fill="transparent"
+                      className="hover:fill-white/15 transition-colors"
+                    />
 
-                  return (
-                    <g
-                      key={sq}
-                      data-square={sq}
-                      onClick={() => !disabled && onSquareClick(sq)}
-                      className={disabled ? 'cursor-default' : 'cursor-pointer'}
-                    >
-                      <rect
-                        x={x}
-                        y={y}
-                        width={FLAT_TILE}
-                        height={FLAT_TILE}
-                        fill={isLight ? 'url(#tile-light)' : 'url(#tile-dark)'}
-                        stroke="#3B7A3E"
-                        strokeWidth="1"
+                    {/* Last Move Subtle Warm Highlight */}
+                    {(isLastFrom || isLastTo) && !isSelected && !legalInfo && (
+                      <polygon
+                        points={points}
+                        fill="rgba(255, 241, 130, 0.28)"
+                        stroke="rgba(255, 236, 110, 0.85)"
+                        strokeWidth="2.2"
+                        className="pointer-events-none"
                       />
-                      {(isLastFrom || isLastTo) && !isSelected && !legalInfo && (
-                        <rect
-                          x={x + 1}
-                          y={y + 1}
-                          width={FLAT_TILE - 2}
-                          height={FLAT_TILE - 2}
-                          fill="rgba(255, 241, 130, 0.34)"
-                          stroke="rgba(255, 232, 95, 0.8)"
-                          strokeWidth="1.8"
-                          className="pointer-events-none"
-                        />
-                      )}
-                      {isHintSquare && !isSelected && (
-                        <rect
-                          x={x + 2}
-                          y={y + 2}
-                          width={FLAT_TILE - 4}
-                          height={FLAT_TILE - 4}
-                          rx="6"
-                          fill="rgba(116, 242, 255, 0.44)"
-                          stroke="#38E8FF"
-                          strokeWidth="2.8"
-                          filter="url(#glow-blue)"
-                          className="pointer-events-none animate-tile-glow"
-                        />
-                      )}
-                      {isSelected && (
-                        <rect
-                          x={x + 2}
-                          y={y + 2}
-                          width={FLAT_TILE - 4}
-                          height={FLAT_TILE - 4}
-                          rx="6"
+                    )}
+
+                    {/* Skill Hint Blue Glow */}
+                    {isHintSquare && !isSelected && (
+                      <polygon
+                        points={points}
+                        fill="rgba(116, 242, 255, 0.42)"
+                        stroke="#38E8FF"
+                        strokeWidth="3"
+                        filter="url(#glow-blue)"
+                        className="pointer-events-none animate-tile-glow"
+                      />
+                    )}
+
+                    {/* Selected Tile: Glowing Neon Yellow Polygon */}
+                    {isSelected && (
+                      <polygon
+                        points={points}
+                        fill="url(#yellow-neon)"
+                        fillOpacity="0.68"
+                        stroke="#FFFCE0"
+                        strokeWidth="3.2"
+                        filter="url(#glow-yellow)"
+                        className="pointer-events-none"
+                      />
+                    )}
+
+                    {/* Legal Quiet Move: Glowing Yellow Polygon + Center Dot */}
+                    {legalInfo && !legalInfo.isCapture && (
+                      <g className="pointer-events-none animate-tile-glow">
+                        <polygon
+                          points={points}
                           fill="url(#yellow-neon)"
-                          fillOpacity="0.78"
-                          stroke="#FFFCE0"
-                          strokeWidth="3"
+                          fillOpacity="0.48"
+                          stroke="#FFF48C"
+                          strokeWidth="2.4"
                           filter="url(#glow-yellow)"
-                          className="pointer-events-none"
                         />
-                      )}
-                      {legalInfo && !legalInfo.isCapture && (
-                        <g className="pointer-events-none animate-tile-glow">
-                          <rect
-                            x={x + 2}
-                            y={y + 2}
-                            width={FLAT_TILE - 4}
-                            height={FLAT_TILE - 4}
-                            rx="6"
-                            fill="url(#yellow-neon)"
-                            fillOpacity="0.54"
-                            stroke="#FFF48C"
-                            strokeWidth="2.4"
-                            filter="url(#glow-yellow)"
-                          />
+                        {isFlat ? (
                           <circle
                             cx={center.x}
                             cy={center.y}
-                            r="10"
+                            r="9"
                             fill="#FFFCE6"
                             stroke="#D99B00"
                             strokeWidth="2"
                           />
-                        </g>
-                      )}
-                      {legalInfo && legalInfo.isCapture && (
-                        <g className="pointer-events-none animate-tile-glow">
-                          <rect
-                            x={x + 2}
-                            y={y + 2}
-                            width={FLAT_TILE - 4}
-                            height={FLAT_TILE - 4}
-                            rx="6"
-                            fill="url(#blue-neon)"
-                            fillOpacity="0.68"
-                            stroke="#DDFBFF"
-                            strokeWidth="3"
-                            filter="url(#glow-blue)"
-                          />
-                          <circle
-                            cx={center.x}
-                            cy={center.y}
-                            r="23"
-                            fill="none"
-                            stroke="#FFFFFF"
-                            strokeWidth="2.4"
-                            strokeDasharray="6 4"
-                          />
-                        </g>
-                      )}
-                      {isCheckedKing && (
-                        <rect
-                          x={x + 2}
-                          y={y + 2}
-                          width={FLAT_TILE - 4}
-                          height={FLAT_TILE - 4}
-                          rx="6"
-                          fill="rgba(239, 68, 68, 0.72)"
-                          stroke="#FFE066"
-                          strokeWidth="3"
-                          className="pointer-events-none animate-tile-glow"
-                        />
-                      )}
-                      {vc === 0 && (
-                        <text
-                          x={x + 5}
-                          y={y + 15}
-                          fontSize="11.5"
-                          fontFamily="'Archivo Black', sans-serif"
-                          fill="#FFFCE6"
-                          stroke="#213825"
-                          strokeWidth="2.2"
-                          paintOrder="stroke"
-                          className="pointer-events-none"
-                        >
-                          {RANKS[boardRow]}
-                        </text>
-                      )}
-                      {vr === 7 && (
-                        <text
-                          x={x + FLAT_TILE - 13}
-                          y={y + FLAT_TILE - 5}
-                          fontSize="11.5"
-                          fontFamily="'Archivo Black', sans-serif"
-                          fill="#FFFCE6"
-                          stroke="#213825"
-                          strokeWidth="2.2"
-                          paintOrder="stroke"
-                          className="pointer-events-none"
-                        >
-                          {FILES[boardCol]}
-                        </text>
-                      )}
-                    </g>
-                  );
-                })
-              )}
-            </g>
-          ) : (
-            /* 2.5D Bilinear 4-Corner Transparent SVG Polygons directly on /arena-bg.png */
-            <g>
-              {Array.from({ length: 8 }, (_, vr) =>
-                Array.from({ length: 8 }, (_, vc) => {
-                  const boardRow = flipped ? 7 - vr : vr;
-                  const boardCol = flipped ? 7 - vc : vc;
-                  const sq = `${FILES[boardCol]}${RANKS[boardRow]}` as Square;
-                  const points = isoTilePoints(vr, vc);
-                  const center = isoGridCenter(vr, vc);
-
-                  const isSelected = selectedSquare === sq;
-                  const legalInfo = legalTargetMap.get(sq);
-                  const isCheckedKing = checkedKingSquare === sq;
-                  const isLastFrom = lastMove?.from === sq;
-                  const isLastTo = lastMove?.to === sq;
-                  const isHintSquare = hintMove?.from === sq || hintMove?.to === sq;
-
-                  return (
-                    <g
-                      key={sq}
-                      data-square={sq}
-                      onClick={() => !disabled && onSquareClick(sq)}
-                      className={disabled ? 'cursor-default' : 'cursor-pointer'}
-                    >
-                      <polygon
-                        points={points}
-                        fill="transparent"
-                        className="hover:fill-white/15 transition-colors"
-                      />
-
-                      {(isLastFrom || isLastTo) && !isSelected && !legalInfo && (
-                        <polygon
-                          points={points}
-                          fill="rgba(255, 241, 130, 0.28)"
-                          stroke="rgba(255, 236, 110, 0.85)"
-                          strokeWidth="2.2"
-                          className="pointer-events-none"
-                        />
-                      )}
-
-                      {isHintSquare && !isSelected && (
-                        <polygon
-                          points={points}
-                          fill="rgba(116, 242, 255, 0.42)"
-                          stroke="#38E8FF"
-                          strokeWidth="3"
-                          filter="url(#glow-blue)"
-                          className="pointer-events-none animate-tile-glow"
-                        />
-                      )}
-
-                      {isSelected && (
-                        <polygon
-                          points={points}
-                          fill="url(#yellow-neon)"
-                          fillOpacity="0.68"
-                          stroke="#FFFCE0"
-                          strokeWidth="3.2"
-                          filter="url(#glow-yellow)"
-                          className="pointer-events-none"
-                        />
-                      )}
-
-                      {legalInfo && !legalInfo.isCapture && (
-                        <g className="pointer-events-none animate-tile-glow">
-                          <polygon
-                            points={points}
-                            fill="url(#yellow-neon)"
-                            fillOpacity="0.48"
-                            stroke="#FFF48C"
-                            strokeWidth="2.4"
-                            filter="url(#glow-yellow)"
-                          />
+                        ) : (
                           <ellipse
                             cx={center.x}
                             cy={center.y}
@@ -679,19 +435,32 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
                             stroke="#D99B00"
                             strokeWidth="2"
                           />
-                        </g>
-                      )}
+                        )}
+                      </g>
+                    )}
 
-                      {legalInfo && legalInfo.isCapture && (
-                        <g className="pointer-events-none animate-tile-glow">
-                          <polygon
-                            points={points}
-                            fill="url(#blue-neon)"
-                            fillOpacity="0.62"
-                            stroke="#DDFBFF"
-                            strokeWidth="3.2"
-                            filter="url(#glow-blue)"
+                    {/* Legal Capture Target: Glowing Neon Blue Polygon + Ring */}
+                    {legalInfo && legalInfo.isCapture && (
+                      <g className="pointer-events-none animate-tile-glow">
+                        <polygon
+                          points={points}
+                          fill="url(#blue-neon)"
+                          fillOpacity="0.62"
+                          stroke="#DDFBFF"
+                          strokeWidth="3.2"
+                          filter="url(#glow-blue)"
+                        />
+                        {isFlat ? (
+                          <circle
+                            cx={center.x}
+                            cy={center.y}
+                            r="20"
+                            fill="none"
+                            stroke="#FFFFFF"
+                            strokeWidth="2.5"
+                            strokeDasharray="6 4"
                           />
+                        ) : (
                           <ellipse
                             cx={center.x}
                             cy={center.y}
@@ -702,55 +471,94 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
                             strokeWidth="2.6"
                             strokeDasharray="6 4"
                           />
-                        </g>
-                      )}
+                        )}
+                      </g>
+                    )}
 
-                      {isCheckedKing && (
-                        <polygon
-                          points={points}
-                          fill="rgba(239, 68, 68, 0.65)"
-                          stroke="#FFE066"
-                          strokeWidth="3.2"
-                          className="pointer-events-none animate-tile-glow"
-                        />
-                      )}
+                    {/* Checked King Alert */}
+                    {isCheckedKing && (
+                      <polygon
+                        points={points}
+                        fill="rgba(239, 68, 68, 0.65)"
+                        stroke="#FFE066"
+                        strokeWidth="3.2"
+                        className="pointer-events-none animate-tile-glow"
+                      />
+                    )}
 
-                      {vr === 7 && (
-                        <text
-                          x={center.x - 16}
-                          y={center.y + 18}
-                          fontSize="12"
-                          fontFamily="'Archivo Black', sans-serif"
-                          fill="rgba(255, 252, 232, 0.9)"
-                          stroke="#1E3520"
-                          strokeWidth="2.6"
-                          paintOrder="stroke"
-                          className="pointer-events-none"
-                        >
-                          {FILES[boardCol]}
-                        </text>
-                      )}
-                      {vc === 7 && (
-                        <text
-                          x={center.x + 12}
-                          y={center.y + 18}
-                          fontSize="12"
-                          fontFamily="'Archivo Black', sans-serif"
-                          fill="rgba(255, 252, 232, 0.9)"
-                          stroke="#1E3520"
-                          strokeWidth="2.6"
-                          paintOrder="stroke"
-                          className="pointer-events-none"
-                        >
-                          {RANKS[boardRow]}
-                        </text>
-                      )}
-                    </g>
-                  );
-                })
-              )}
-            </g>
-          )}
+                    {/* Edge Rank & File Coordinates */}
+                    {isFlat ? (
+                      <>
+                        {vc === 0 && (
+                          <text
+                            x={center.x - 24}
+                            y={center.y - 14}
+                            fontSize="11.5"
+                            fontFamily="'Archivo Black', sans-serif"
+                            fill="rgba(255, 252, 232, 0.92)"
+                            stroke="#1E3520"
+                            strokeWidth="2.4"
+                            paintOrder="stroke"
+                            className="pointer-events-none"
+                          >
+                            {RANKS[boardRow]}
+                          </text>
+                        )}
+                        {vr === 7 && (
+                          <text
+                            x={center.x + 17}
+                            y={center.y + 24}
+                            fontSize="11.5"
+                            fontFamily="'Archivo Black', sans-serif"
+                            fill="rgba(255, 252, 232, 0.92)"
+                            stroke="#1E3520"
+                            strokeWidth="2.4"
+                            paintOrder="stroke"
+                            className="pointer-events-none"
+                          >
+                            {FILES[boardCol]}
+                          </text>
+                        )}
+                      </>
+                    ) : (
+                      <>
+                        {vr === 7 && (
+                          <text
+                            x={center.x - 16}
+                            y={center.y + 18}
+                            fontSize="12"
+                            fontFamily="'Archivo Black', sans-serif"
+                            fill="rgba(255, 252, 232, 0.9)"
+                            stroke="#1E3520"
+                            strokeWidth="2.6"
+                            paintOrder="stroke"
+                            className="pointer-events-none"
+                          >
+                            {FILES[boardCol]}
+                          </text>
+                        )}
+                        {vc === 7 && (
+                          <text
+                            x={center.x + 12}
+                            y={center.y + 18}
+                            fontSize="12"
+                            fontFamily="'Archivo Black', sans-serif"
+                            fill="rgba(255, 252, 232, 0.9)"
+                            stroke="#1E3520"
+                            strokeWidth="2.6"
+                            paintOrder="stroke"
+                            className="pointer-events-none"
+                          >
+                            {RANKS[boardRow]}
+                          </text>
+                        )}
+                      </>
+                    )}
+                  </g>
+                );
+              })
+            )}
+          </g>
 
           {/* Glowing Surface Direction Arrows */}
           {surfaceArrows.length > 0 && (
@@ -773,8 +581,8 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
           {firstCaptureTarget && !disabled && (
             (() => {
               const pt = squareToBoardPoint(firstCaptureTarget, flipped, boardView);
-              const bx = Math.max(150, Math.min(ARENA_W - 150, pt.x));
-              const by = Math.max(66, pt.y - 84);
+              const bx = Math.max(150, Math.min(stage.w - 150, pt.x));
+              const by = Math.max(66, pt.y - 78);
               return (
                 <g className="pointer-events-none animate-tile-glow">
                   <rect
@@ -810,15 +618,15 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
           )}
         </svg>
 
-        {/* 3. FOOT-ANCHORED STANDING CHIBI PIECES (`translate(-50%, -85%)`) AT (xPct%, yPct%) */}
+        {/* 3. FOOT-ANCHORED STANDING CHIBI PIECES AT EXACT TILE CENTERS (row + 0.5, col + 0.5) */}
         <div className="absolute inset-0 pointer-events-none z-20">
           {sortedPieces.map((p, idx) => {
             const isSelected = selectedSquare === p.sq;
             const isLastTo = lastMove?.to === p.sq;
             const isJumpingAttacker = attackJumpInfo?.targetSq === p.sq;
             const depthScale = isFlat ? 1 : 0.9 + ((p.vr + p.vc) / 14) * 0.16;
-            const widthPct = ((isFlat ? 70 : 76) * depthScale * 100) / ARENA_W;
-            const heightPct = ((isFlat ? 81 : 88) * depthScale * 100) / ARENA_H;
+            const widthPct = ((isFlat ? 58 : 76) * depthScale * 100) / stage.w;
+            const heightPct = ((isFlat ? 68 : 88) * depthScale * 100) / stage.h;
             const idleDelay = `${(((p.vr * 7 + p.vc * 3) % 9) * 0.24).toFixed(2)}s`;
 
             const animClass = isJumpingAttacker
@@ -840,7 +648,7 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
                   top: `${p.yPct}%`,
                   width: `${widthPct}%`,
                   height: `${heightPct}%`,
-                  transform: 'translate(-50%, -85%)',
+                  transform: isFlat ? 'translate(-50%, -82%)' : 'translate(-50%, -85%)',
                   zIndex: idx + 1,
                 }}
               >
@@ -865,7 +673,7 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
                   />
                 </div>
 
-                {/* Comic Emote Speech Bubble floating cleanly above King's head */}
+                {/* Comic Emote Speech Bubble floating above King */}
                 {kingEmote && (
                   <div
                     key={kingEmote.id}
@@ -878,7 +686,7 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
             );
           })}
 
-          {/* Captured Enemy Pieces anchored along Left & Right Outer Lawns */}
+          {/* Captured Enemy Pieces along Left & Right Outer Lawns */}
           {leftBenchCoords.map((item, idx) => (
             <div
               key={item.key}
@@ -886,9 +694,9 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
               style={{
                 left: `${item.xPct}%`,
                 top: `${item.yPct}%`,
-                width: `${(52 / ARENA_W) * 100}%`,
-                height: `${(60 / ARENA_H) * 100}%`,
-                transform: 'translate(-50%, -85%)',
+                width: `${((isFlat ? 48 : 52) / stage.w) * 100}%`,
+                height: `${((isFlat ? 56 : 60) / stage.h) * 100}%`,
+                transform: isFlat ? 'translate(-50%, -82%)' : 'translate(-50%, -85%)',
               }}
             >
               <div
@@ -907,9 +715,9 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
               style={{
                 left: `${item.xPct}%`,
                 top: `${item.yPct}%`,
-                width: `${(52 / ARENA_W) * 100}%`,
-                height: `${(60 / ARENA_H) * 100}%`,
-                transform: 'translate(-50%, -85%)',
+                width: `${((isFlat ? 48 : 52) / stage.w) * 100}%`,
+                height: `${((isFlat ? 56 : 60) / stage.h) * 100}%`,
+                transform: isFlat ? 'translate(-50%, -82%)' : 'translate(-50%, -85%)',
               }}
             >
               <div
