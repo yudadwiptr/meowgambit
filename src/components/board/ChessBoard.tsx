@@ -5,6 +5,8 @@ import { AnimalPiece } from '../pieces/AnimalPiece';
 import { SkillVfxCanvas } from '../vfx/SkillVfxCanvas';
 import {
   ARENA_H,
+  ARENA_NATIVE_H,
+  ARENA_NATIVE_W,
   ARENA_W,
   FLAT_ORIGIN_X,
   FLAT_ORIGIN_Y,
@@ -75,11 +77,11 @@ function buildSurfaceArrow(from: { x: number; y: number }, to: { x: number; y: n
 }
 
 /**
- * Full-Viewport Arena Board locked pixel-perfectly onto public/arena-bg.png!
- * - In 'iso' mode: hides the old manual SVG board & overlays transparent 8x8 interactive
- *   polygons directly on top of the 8x8 grass tiles of /arena-bg.png using identical
- *   cover/slice projection math so pieces, glows, arrows, and VFX never drift.
- * - In 'flat' mode: keeps /arena-bg.png softly blurred behind a crisp straight 8x8 grass board.
+ * Single Unified Fixed-Aspect Arena Stage (`2912 / 1440`):
+ * Wraps `/arena-bg.png`, the 4-corner bilinear SVG `<polygon>` tile highlights,
+ * standing chibi pieces anchored at their feet (`translate(-50%, -85%)`),
+ * captured benches, emotes, and HTML5 Canvas VFX inside ONE exact aspect-locked
+ * stage container so (x%, y%) coordinates NEVER drift on any screen resize!
  */
 export const ChessBoard: React.FC<ChessBoardProps> = ({
   chess,
@@ -100,22 +102,45 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
   onSquareClick,
 }) => {
   const isFlat = boardView === 'flat';
+  const nativeRatio = ARENA_NATIVE_W / ARENA_NATIVE_H; // 2.0222...
 
-  // Use xMidYMid slice (exact `background-size: cover`) on desktop/landscape,
-  // and gracefully switch to xMidYMid meet on very narrow mobile portrait so all 8x8 tiles stay tappable!
-  const [isNarrowPortrait, setIsNarrowPortrait] = useState<boolean>(() =>
-    typeof window !== 'undefined' ? window.innerWidth / window.innerHeight < 1.15 : false
-  );
+  const [stageDims, setStageDims] = useState<{ w: number; h: number }>(() => {
+    if (typeof window === 'undefined') return { w: ARENA_W, h: ARENA_H };
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
+    if (vw / vh >= 1.25) {
+      // Cover viewport cleanly on desktop & landscape without black bars
+      const w = Math.max(vw, vh * nativeRatio);
+      return { w, h: w / nativeRatio };
+    }
+    // On mobile portrait, size the fixed-aspect stage so the 52%-wide chessboard fills ~96% of screen width!
+    const w = Math.min(vw * 1.84, vh * nativeRatio);
+    return { w, h: w / nativeRatio };
+  });
 
   useEffect(() => {
-    const onResize = () => {
-      setIsNarrowPortrait(window.innerWidth / window.innerHeight < 1.15);
+    const updateSize = () => {
+      const vw = window.innerWidth;
+      const vh = window.innerHeight;
+      if (isFlat) {
+        // In flat mode, ensure the 528px centered board fits comfortably inside viewport
+        const scale = Math.min(vw / 740, vh / 640);
+        const w = ARENA_W * scale;
+        setStageDims({ w, h: w / nativeRatio });
+        return;
+      }
+      if (vw / vh >= 1.25) {
+        const w = Math.max(vw, vh * nativeRatio);
+        setStageDims({ w, h: w / nativeRatio });
+      } else {
+        const w = Math.min(vw * 1.84, vh * nativeRatio);
+        setStageDims({ w, h: w / nativeRatio });
+      }
     };
-    window.addEventListener('resize', onResize);
-    return () => window.removeEventListener('resize', onResize);
-  }, []);
-
-  const svgPreserveAspect = !isFlat && !isNarrowPortrait ? 'xMidYMid slice' : 'xMidYMid meet';
+    updateSize();
+    window.addEventListener('resize', updateSize);
+    return () => window.removeEventListener('resize', updateSize);
+  }, [isFlat, nativeRatio]);
 
   const boardMatrix = useMemo(() => {
     void fen;
@@ -144,6 +169,8 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
       vc: number;
       x: number;
       y: number;
+      xPct: number;
+      yPct: number;
     }> = [];
 
     for (let r = 0; r < 8; r++) {
@@ -156,10 +183,7 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
           sq,
           color: piece.color,
           type: piece.type,
-          vr: pos.vr,
-          vc: pos.vc,
-          x: pos.x,
-          y: pos.y,
+          ...pos,
         });
       }
     }
@@ -189,13 +213,15 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
     if (!vfxEvent || (!vfxEvent.isCapture && !vfxEvent.isCheck)) return null;
     const f = squareToBoardPoint(vfxEvent.from, flipped, boardView);
     const t = squareToBoardPoint(vfxEvent.to, flipped, boardView);
+    const scaleX = stageDims.w / ARENA_W;
+    const scaleY = stageDims.h / ARENA_H;
     return {
       targetSq: vfxEvent.to,
-      dx: f.x - t.x,
-      dy: f.y - t.y,
+      dx: (f.x - t.x) * scaleX,
+      dy: (f.y - t.y) * scaleY,
       id: vfxEvent.id,
     };
-  }, [vfxEvent, flipped, boardView]);
+  }, [vfxEvent, flipped, boardView, stageDims.w, stageDims.h]);
 
   const surfaceArrows = useMemo(() => {
     if (!selectedSquare) return [];
@@ -227,27 +253,30 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
   const flatW = FLAT_TILE * 8;
   const flatH = FLAT_TILE * 8;
 
-  // Captured pieces sideline benches sitting neatly on the outer grass lawns of arena-bg.png!
+  // Captured pieces sideline benches sitting neatly on the outer grass lawns
   const leftBenchCoords = useMemo(
     () =>
       capturedByWhite.slice(0, 12).map((pieceType, idx) => {
         if (isFlat) {
           const col = idx % 2;
           const row = Math.floor(idx / 2);
+          const x = FLAT_ORIGIN_X - 66 - col * 52;
+          const y = FLAT_ORIGIN_Y + 95 + row * 72;
           return {
             pieceType,
-            x: FLAT_ORIGIN_X - 66 - col * 52,
-            y: FLAT_ORIGIN_Y + 95 + row * 72,
+            xPct: (x / ARENA_W) * 100,
+            yPct: (y / ARENA_H) * 100,
             key: `capw-${idx}-${pieceType}`,
           };
         }
-        // Left outer lawn along the stone cliff of arena-bg.png
         const row = Math.floor(idx / 5);
         const col = idx % 5;
+        const x = 280 - row * 48 + col * 52;
+        const y = 472 + row * 34 + col * 30;
         return {
           pieceType,
-          x: 280 - row * 48 + col * 52,
-          y: 472 + row * 34 + col * 30,
+          xPct: (x / ARENA_W) * 100,
+          yPct: (y / ARENA_H) * 100,
           key: `capw-${idx}-${pieceType}`,
         };
       }),
@@ -260,20 +289,23 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
         if (isFlat) {
           const col = idx % 2;
           const row = Math.floor(idx / 2);
+          const x = FLAT_ORIGIN_X + flatW + 66 + col * 52;
+          const y = FLAT_ORIGIN_Y + 95 + row * 72;
           return {
             pieceType,
-            x: FLAT_ORIGIN_X + flatW + 66 + col * 52,
-            y: FLAT_ORIGIN_Y + 95 + row * 72,
+            xPct: (x / ARENA_W) * 100,
+            yPct: (y / ARENA_H) * 100,
             key: `capb-${idx}-${pieceType}`,
           };
         }
-        // Right outer lawn along the stone cliff of arena-bg.png
         const row = Math.floor(idx / 5);
         const col = idx % 5;
+        const x = 1175 + row * 48 - col * 52;
+        const y = 472 + row * 34 + col * 30;
         return {
           pieceType,
-          x: 1175 + row * 48 - col * 52,
-          y: 472 + row * 34 + col * 30,
+          xPct: (x / ARENA_W) * 100,
+          yPct: (y / ARENA_H) * 100,
           key: `capb-${idx}-${pieceType}`,
         };
       }),
@@ -282,185 +314,177 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
 
   return (
     <div
-      className={`relative w-full h-full overflow-hidden select-none ${
-        isShaking ? 'animate-board-shake' : ''
-      }`}
-      style={{
-        backgroundImage: "url('/arena-bg.png')",
-        backgroundSize: 'cover',
-        backgroundPosition: 'center',
-        backgroundRepeat: 'no-repeat',
-      }}
+      className="relative w-full h-full overflow-hidden flex items-center justify-center bg-[#23422D] select-none"
+      style={
+        isFlat
+          ? {
+              backgroundImage: "url('/arena-bg.png')",
+              backgroundSize: 'cover',
+              backgroundPosition: 'center',
+            }
+          : undefined
+      }
     >
-      {/* In Flat mode, apply a soft dim/blur backdrop over arena-bg.png so straight board pops cleanly */}
+      {/* In Flat mode, soft dark blur behind straight board */}
       {isFlat && (
         <div className="absolute inset-0 bg-[#183022]/55 backdrop-blur-[3px] pointer-events-none" />
       )}
 
-      <svg
-        viewBox={`0 0 ${ARENA_W} ${ARENA_H}`}
-        preserveAspectRatio={svgPreserveAspect}
-        className="absolute inset-0 w-full h-full block"
-        xmlns="http://www.w3.org/2000/svg"
+      {/* =================================================================
+          SINGLE FIXED-ASPECT STAGE CONTAINER (2912 x 1440 = 1456 x 720)
+          Image + SVG Polygon Grid + Foot-Anchored Pieces + VFX Canvas
+          all share the EXACT SAME (x%, y%) coordinate space — ZERO DRIFT!
+         ================================================================= */}
+      <div
+        className={`relative shrink-0 ${isShaking ? 'animate-board-shake' : ''}`}
+        style={{
+          width: `${stageDims.w}px`,
+          height: `${stageDims.h}px`,
+        }}
       >
-        <defs>
-          <filter id="glow-yellow" x="-35%" y="-35%" width="170%" height="170%">
-            <feGaussianBlur stdDeviation="5.5" result="blur" />
-            <feMerge>
-              <feMergeNode in="blur" />
-              <feMergeNode in="SourceGraphic" />
-            </feMerge>
-          </filter>
-          <filter id="glow-blue" x="-35%" y="-35%" width="170%" height="170%">
-            <feGaussianBlur stdDeviation="6.5" result="blur" />
-            <feMerge>
-              <feMergeNode in="blur" />
-              <feMergeNode in="SourceGraphic" />
-            </feMerge>
-          </filter>
-          <linearGradient id="tile-light" x1="0%" y1="0%" x2="100%" y2="100%">
-            <stop offset="0%" stopColor="#9FE866" />
-            <stop offset="100%" stopColor="#82CE4F" />
-          </linearGradient>
-          <linearGradient id="tile-dark" x1="0%" y1="0%" x2="100%" y2="100%">
-            <stop offset="0%" stopColor="#5AAE5D" />
-            <stop offset="100%" stopColor="#468F4A" />
-          </linearGradient>
-          <linearGradient id="yellow-neon" x1="0%" y1="0%" x2="100%" y2="100%">
-            <stop offset="0%" stopColor="#FFF78A" />
-            <stop offset="100%" stopColor="#FFD83B" />
-          </linearGradient>
-          <linearGradient id="blue-neon" x1="0%" y1="0%" x2="100%" y2="100%">
-            <stop offset="0%" stopColor="#7CF2FF" />
-            <stop offset="100%" stopColor="#1EC8FF" />
-          </linearGradient>
-        </defs>
-
-        {/* === ISO MODE: Authentic /arena-bg.png rendered inside the exact same SVG coordinate space === */}
+        {/* 1. Authentic /arena-bg.png locked 1:1 to stage container */}
         {!isFlat && (
-          <image
-            href="/arena-bg.png"
-            x="0"
-            y="0"
-            width={ARENA_W}
-            height={ARENA_H}
-            preserveAspectRatio="none"
+          <img
+            src="/arena-bg.png"
+            alt=""
+            draggable={false}
+            className="absolute inset-0 w-full h-full object-fill pointer-events-none select-none block"
           />
         )}
 
-        {/* ================================================================
-            BRANCH A: STRAIGHT / FLAT 2D BOARD (OPTIONAL ACCESSIBILITY TOGGLE)
-           ================================================================ */}
-        {isFlat ? (
-          <g>
-            {/* Warm Wood/Stone Frame around Straight Board */}
-            <rect
-              x={FLAT_ORIGIN_X - 18}
-              y={FLAT_ORIGIN_Y - 18}
-              width={flatW + 36}
-              height={flatH + 46}
-              rx="24"
-              fill="#5C4432"
-              stroke="#1E1813"
-              strokeWidth="3.5"
-            />
-            <rect
-              x={FLAT_ORIGIN_X - 14}
-              y={FLAT_ORIGIN_Y - 14}
-              width={flatW + 28}
-              height={flatH + 28}
-              rx="18"
-              fill="#97A1A4"
-              stroke="#1E1813"
-              strokeWidth="3"
-            />
-            <rect
-              x={FLAT_ORIGIN_X - 5}
-              y={FLAT_ORIGIN_Y - 5}
-              width={flatW + 10}
-              height={flatH + 10}
-              rx="9"
-              fill="#4B9443"
-              stroke="#1C331A"
-              strokeWidth="2"
-            />
+        {/* 2. Interactive 8x8 SVG Polygon Overlay (Bilinear 4-Corner Highlights & Arrows) */}
+        <svg
+          viewBox={`0 0 ${ARENA_W} ${ARENA_H}`}
+          preserveAspectRatio="none"
+          className="absolute inset-0 w-full h-full block z-10"
+          xmlns="http://www.w3.org/2000/svg"
+        >
+          <defs>
+            <filter id="glow-yellow" x="-35%" y="-35%" width="170%" height="170%">
+              <feGaussianBlur stdDeviation="5.5" result="blur" />
+              <feMerge>
+                <feMergeNode in="blur" />
+                <feMergeNode in="SourceGraphic" />
+              </feMerge>
+            </filter>
+            <filter id="glow-blue" x="-35%" y="-35%" width="170%" height="170%">
+              <feGaussianBlur stdDeviation="6.5" result="blur" />
+              <feMerge>
+                <feMergeNode in="blur" />
+                <feMergeNode in="SourceGraphic" />
+              </feMerge>
+            </filter>
+            <linearGradient id="tile-light" x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" stopColor="#9FE866" />
+              <stop offset="100%" stopColor="#82CE4F" />
+            </linearGradient>
+            <linearGradient id="tile-dark" x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" stopColor="#5AAE5D" />
+              <stop offset="100%" stopColor="#468F4A" />
+            </linearGradient>
+            <linearGradient id="yellow-neon" x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" stopColor="#FFF78A" />
+              <stop offset="100%" stopColor="#FFD83B" />
+            </linearGradient>
+            <linearGradient id="blue-neon" x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" stopColor="#7CF2FF" />
+              <stop offset="100%" stopColor="#1EC8FF" />
+            </linearGradient>
+          </defs>
 
-            {Array.from({ length: 8 }, (_, vr) =>
-              Array.from({ length: 8 }, (_, vc) => {
-                const boardRow = flipped ? 7 - vr : vr;
-                const boardCol = flipped ? 7 - vc : vc;
-                const sq = `${FILES[boardCol]}${RANKS[boardRow]}` as Square;
-                const isLight = (boardRow + boardCol) % 2 === 0;
-                const x = FLAT_ORIGIN_X + vc * FLAT_TILE;
-                const y = FLAT_ORIGIN_Y + vr * FLAT_TILE;
-                const center = flatGridCenter(vr, vc);
+          {isFlat ? (
+            <g>
+              <rect
+                x={FLAT_ORIGIN_X - 18}
+                y={FLAT_ORIGIN_Y - 18}
+                width={flatW + 36}
+                height={flatH + 46}
+                rx="24"
+                fill="#5C4432"
+                stroke="#1E1813"
+                strokeWidth="3.5"
+              />
+              <rect
+                x={FLAT_ORIGIN_X - 14}
+                y={FLAT_ORIGIN_Y - 14}
+                width={flatW + 28}
+                height={flatH + 28}
+                rx="18"
+                fill="#97A1A4"
+                stroke="#1E1813"
+                strokeWidth="3"
+              />
+              <rect
+                x={FLAT_ORIGIN_X - 5}
+                y={FLAT_ORIGIN_Y - 5}
+                width={flatW + 10}
+                height={flatH + 10}
+                rx="9"
+                fill="#4B9443"
+                stroke="#1C331A"
+                strokeWidth="2"
+              />
 
-                const isSelected = selectedSquare === sq;
-                const legalInfo = legalTargetMap.get(sq);
-                const isCheckedKing = checkedKingSquare === sq;
-                const isLastFrom = lastMove?.from === sq;
-                const isLastTo = lastMove?.to === sq;
-                const isHintSquare = hintMove?.from === sq || hintMove?.to === sq;
+              {Array.from({ length: 8 }, (_, vr) =>
+                Array.from({ length: 8 }, (_, vc) => {
+                  const boardRow = flipped ? 7 - vr : vr;
+                  const boardCol = flipped ? 7 - vc : vc;
+                  const sq = `${FILES[boardCol]}${RANKS[boardRow]}` as Square;
+                  const isLight = (boardRow + boardCol) % 2 === 0;
+                  const x = FLAT_ORIGIN_X + vc * FLAT_TILE;
+                  const y = FLAT_ORIGIN_Y + vr * FLAT_TILE;
+                  const center = flatGridCenter(vr, vc);
 
-                return (
-                  <g
-                    key={sq}
-                    data-square={sq}
-                    onClick={() => !disabled && onSquareClick(sq)}
-                    className={disabled ? 'cursor-default' : 'cursor-pointer'}
-                  >
-                    <rect
-                      x={x}
-                      y={y}
-                      width={FLAT_TILE}
-                      height={FLAT_TILE}
-                      fill={isLight ? 'url(#tile-light)' : 'url(#tile-dark)'}
-                      stroke="#3B7A3E"
-                      strokeWidth="1"
-                    />
-                    {(isLastFrom || isLastTo) && !isSelected && !legalInfo && (
+                  const isSelected = selectedSquare === sq;
+                  const legalInfo = legalTargetMap.get(sq);
+                  const isCheckedKing = checkedKingSquare === sq;
+                  const isLastFrom = lastMove?.from === sq;
+                  const isLastTo = lastMove?.to === sq;
+                  const isHintSquare = hintMove?.from === sq || hintMove?.to === sq;
+
+                  return (
+                    <g
+                      key={sq}
+                      data-square={sq}
+                      onClick={() => !disabled && onSquareClick(sq)}
+                      className={disabled ? 'cursor-default' : 'cursor-pointer'}
+                    >
                       <rect
-                        x={x + 1}
-                        y={y + 1}
-                        width={FLAT_TILE - 2}
-                        height={FLAT_TILE - 2}
-                        fill="rgba(255, 241, 130, 0.34)"
-                        stroke="rgba(255, 232, 95, 0.8)"
-                        strokeWidth="1.8"
-                        className="pointer-events-none"
+                        x={x}
+                        y={y}
+                        width={FLAT_TILE}
+                        height={FLAT_TILE}
+                        fill={isLight ? 'url(#tile-light)' : 'url(#tile-dark)'}
+                        stroke="#3B7A3E"
+                        strokeWidth="1"
                       />
-                    )}
-                    {isHintSquare && !isSelected && (
-                      <rect
-                        x={x + 2}
-                        y={y + 2}
-                        width={FLAT_TILE - 4}
-                        height={FLAT_TILE - 4}
-                        rx="6"
-                        fill="rgba(116, 242, 255, 0.44)"
-                        stroke="#38E8FF"
-                        strokeWidth="2.8"
-                        filter="url(#glow-blue)"
-                        className="pointer-events-none animate-tile-glow"
-                      />
-                    )}
-                    {isSelected && (
-                      <rect
-                        x={x + 2}
-                        y={y + 2}
-                        width={FLAT_TILE - 4}
-                        height={FLAT_TILE - 4}
-                        rx="6"
-                        fill="url(#yellow-neon)"
-                        fillOpacity="0.78"
-                        stroke="#FFFCE0"
-                        strokeWidth="3"
-                        filter="url(#glow-yellow)"
-                        className="pointer-events-none"
-                      />
-                    )}
-                    {legalInfo && !legalInfo.isCapture && (
-                      <g className="pointer-events-none animate-tile-glow">
+                      {(isLastFrom || isLastTo) && !isSelected && !legalInfo && (
+                        <rect
+                          x={x + 1}
+                          y={y + 1}
+                          width={FLAT_TILE - 2}
+                          height={FLAT_TILE - 2}
+                          fill="rgba(255, 241, 130, 0.34)"
+                          stroke="rgba(255, 232, 95, 0.8)"
+                          strokeWidth="1.8"
+                          className="pointer-events-none"
+                        />
+                      )}
+                      {isHintSquare && !isSelected && (
+                        <rect
+                          x={x + 2}
+                          y={y + 2}
+                          width={FLAT_TILE - 4}
+                          height={FLAT_TILE - 4}
+                          rx="6"
+                          fill="rgba(116, 242, 255, 0.44)"
+                          stroke="#38E8FF"
+                          strokeWidth="2.8"
+                          filter="url(#glow-blue)"
+                          className="pointer-events-none animate-tile-glow"
+                        />
+                      )}
+                      {isSelected && (
                         <rect
                           x={x + 2}
                           y={y + 2}
@@ -468,291 +492,333 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
                           height={FLAT_TILE - 4}
                           rx="6"
                           fill="url(#yellow-neon)"
-                          fillOpacity="0.54"
-                          stroke="#FFF48C"
-                          strokeWidth="2.4"
+                          fillOpacity="0.78"
+                          stroke="#FFFCE0"
+                          strokeWidth="3"
                           filter="url(#glow-yellow)"
+                          className="pointer-events-none"
                         />
-                        <circle
-                          cx={center.x}
-                          cy={center.y}
-                          r="10"
-                          fill="#FFFCE6"
-                          stroke="#D99B00"
-                          strokeWidth="2"
-                        />
-                      </g>
-                    )}
-                    {legalInfo && legalInfo.isCapture && (
-                      <g className="pointer-events-none animate-tile-glow">
+                      )}
+                      {legalInfo && !legalInfo.isCapture && (
+                        <g className="pointer-events-none animate-tile-glow">
+                          <rect
+                            x={x + 2}
+                            y={y + 2}
+                            width={FLAT_TILE - 4}
+                            height={FLAT_TILE - 4}
+                            rx="6"
+                            fill="url(#yellow-neon)"
+                            fillOpacity="0.54"
+                            stroke="#FFF48C"
+                            strokeWidth="2.4"
+                            filter="url(#glow-yellow)"
+                          />
+                          <circle
+                            cx={center.x}
+                            cy={center.y}
+                            r="10"
+                            fill="#FFFCE6"
+                            stroke="#D99B00"
+                            strokeWidth="2"
+                          />
+                        </g>
+                      )}
+                      {legalInfo && legalInfo.isCapture && (
+                        <g className="pointer-events-none animate-tile-glow">
+                          <rect
+                            x={x + 2}
+                            y={y + 2}
+                            width={FLAT_TILE - 4}
+                            height={FLAT_TILE - 4}
+                            rx="6"
+                            fill="url(#blue-neon)"
+                            fillOpacity="0.68"
+                            stroke="#DDFBFF"
+                            strokeWidth="3"
+                            filter="url(#glow-blue)"
+                          />
+                          <circle
+                            cx={center.x}
+                            cy={center.y}
+                            r="23"
+                            fill="none"
+                            stroke="#FFFFFF"
+                            strokeWidth="2.4"
+                            strokeDasharray="6 4"
+                          />
+                        </g>
+                      )}
+                      {isCheckedKing && (
                         <rect
                           x={x + 2}
                           y={y + 2}
                           width={FLAT_TILE - 4}
                           height={FLAT_TILE - 4}
                           rx="6"
-                          fill="url(#blue-neon)"
-                          fillOpacity="0.68"
-                          stroke="#DDFBFF"
+                          fill="rgba(239, 68, 68, 0.72)"
+                          stroke="#FFE066"
+                          strokeWidth="3"
+                          className="pointer-events-none animate-tile-glow"
+                        />
+                      )}
+                      {vc === 0 && (
+                        <text
+                          x={x + 5}
+                          y={y + 15}
+                          fontSize="11.5"
+                          fontFamily="'Archivo Black', sans-serif"
+                          fill="#FFFCE6"
+                          stroke="#213825"
+                          strokeWidth="2.2"
+                          paintOrder="stroke"
+                          className="pointer-events-none"
+                        >
+                          {RANKS[boardRow]}
+                        </text>
+                      )}
+                      {vr === 7 && (
+                        <text
+                          x={x + FLAT_TILE - 13}
+                          y={y + FLAT_TILE - 5}
+                          fontSize="11.5"
+                          fontFamily="'Archivo Black', sans-serif"
+                          fill="#FFFCE6"
+                          stroke="#213825"
+                          strokeWidth="2.2"
+                          paintOrder="stroke"
+                          className="pointer-events-none"
+                        >
+                          {FILES[boardCol]}
+                        </text>
+                      )}
+                    </g>
+                  );
+                })
+              )}
+            </g>
+          ) : (
+            /* 2.5D Bilinear 4-Corner Transparent SVG Polygons directly on /arena-bg.png */
+            <g>
+              {Array.from({ length: 8 }, (_, vr) =>
+                Array.from({ length: 8 }, (_, vc) => {
+                  const boardRow = flipped ? 7 - vr : vr;
+                  const boardCol = flipped ? 7 - vc : vc;
+                  const sq = `${FILES[boardCol]}${RANKS[boardRow]}` as Square;
+                  const points = isoTilePoints(vr, vc);
+                  const center = isoGridCenter(vr, vc);
+
+                  const isSelected = selectedSquare === sq;
+                  const legalInfo = legalTargetMap.get(sq);
+                  const isCheckedKing = checkedKingSquare === sq;
+                  const isLastFrom = lastMove?.from === sq;
+                  const isLastTo = lastMove?.to === sq;
+                  const isHintSquare = hintMove?.from === sq || hintMove?.to === sq;
+
+                  return (
+                    <g
+                      key={sq}
+                      data-square={sq}
+                      onClick={() => !disabled && onSquareClick(sq)}
+                      className={disabled ? 'cursor-default' : 'cursor-pointer'}
+                    >
+                      <polygon
+                        points={points}
+                        fill="transparent"
+                        className="hover:fill-white/15 transition-colors"
+                      />
+
+                      {(isLastFrom || isLastTo) && !isSelected && !legalInfo && (
+                        <polygon
+                          points={points}
+                          fill="rgba(255, 241, 130, 0.28)"
+                          stroke="rgba(255, 236, 110, 0.85)"
+                          strokeWidth="2.2"
+                          className="pointer-events-none"
+                        />
+                      )}
+
+                      {isHintSquare && !isSelected && (
+                        <polygon
+                          points={points}
+                          fill="rgba(116, 242, 255, 0.42)"
+                          stroke="#38E8FF"
                           strokeWidth="3"
                           filter="url(#glow-blue)"
+                          className="pointer-events-none animate-tile-glow"
                         />
-                        <circle
-                          cx={center.x}
-                          cy={center.y}
-                          r="23"
-                          fill="none"
-                          stroke="#FFFFFF"
-                          strokeWidth="2.4"
-                          strokeDasharray="6 4"
-                        />
-                      </g>
-                    )}
-                    {isCheckedKing && (
-                      <rect
-                        x={x + 2}
-                        y={y + 2}
-                        width={FLAT_TILE - 4}
-                        height={FLAT_TILE - 4}
-                        rx="6"
-                        fill="rgba(239, 68, 68, 0.72)"
-                        stroke="#FFE066"
-                        strokeWidth="3"
-                        className="pointer-events-none animate-tile-glow"
-                      />
-                    )}
-                    {vc === 0 && (
-                      <text
-                        x={x + 5}
-                        y={y + 15}
-                        fontSize="11.5"
-                        fontFamily="'Archivo Black', sans-serif"
-                        fill="#FFFCE6"
-                        stroke="#213825"
-                        strokeWidth="2.2"
-                        paintOrder="stroke"
-                        className="pointer-events-none"
-                      >
-                        {RANKS[boardRow]}
-                      </text>
-                    )}
-                    {vr === 7 && (
-                      <text
-                        x={x + FLAT_TILE - 13}
-                        y={y + FLAT_TILE - 5}
-                        fontSize="11.5"
-                        fontFamily="'Archivo Black', sans-serif"
-                        fill="#FFFCE6"
-                        stroke="#213825"
-                        strokeWidth="2.2"
-                        paintOrder="stroke"
-                        className="pointer-events-none"
-                      >
-                        {FILES[boardCol]}
-                      </text>
-                    )}
-                  </g>
-                );
-              })
-            )}
-          </g>
-        ) : (
-          /* ================================================================
-             BRANCH B: TRANSPARENT 8x8 INTERACTIVE OVERLAY ON /arena-bg.png!
-             Zero manual board tiles — uses the authentic grass tiles directly!
-             ================================================================ */
-          <g>
-            {Array.from({ length: 8 }, (_, vr) =>
-              Array.from({ length: 8 }, (_, vc) => {
-                const boardRow = flipped ? 7 - vr : vr;
-                const boardCol = flipped ? 7 - vc : vc;
-                const sq = `${FILES[boardCol]}${RANKS[boardRow]}` as Square;
-                const points = isoTilePoints(vr, vc);
-                const center = isoGridCenter(vr, vc);
+                      )}
 
-                const isSelected = selectedSquare === sq;
-                const legalInfo = legalTargetMap.get(sq);
-                const isCheckedKing = checkedKingSquare === sq;
-                const isLastFrom = lastMove?.from === sq;
-                const isLastTo = lastMove?.to === sq;
-                const isHintSquare = hintMove?.from === sq || hintMove?.to === sq;
-
-                return (
-                  <g
-                    key={sq}
-                    data-square={sq}
-                    onClick={() => !disabled && onSquareClick(sq)}
-                    className={disabled ? 'cursor-default' : 'cursor-pointer'}
-                  >
-                    {/* Transparent exact-fit hit target directly over /arena-bg.png grass tile */}
-                    <polygon
-                      points={points}
-                      fill="transparent"
-                      className="hover:fill-white/10 transition-colors"
-                    />
-
-                    {/* Last Move Subtle Golden Rim */}
-                    {(isLastFrom || isLastTo) && !isSelected && !legalInfo && (
-                      <polygon
-                        points={points}
-                        fill="rgba(255, 241, 130, 0.28)"
-                        stroke="rgba(255, 236, 110, 0.85)"
-                        strokeWidth="2.2"
-                        className="pointer-events-none"
-                      />
-                    )}
-
-                    {/* Skill Hint Blue Glow */}
-                    {isHintSquare && !isSelected && (
-                      <polygon
-                        points={points}
-                        fill="rgba(116, 242, 255, 0.42)"
-                        stroke="#38E8FF"
-                        strokeWidth="3"
-                        filter="url(#glow-blue)"
-                        className="pointer-events-none animate-tile-glow"
-                      />
-                    )}
-
-                    {/* Selected Piece: Soft Glowing Neon Yellow */}
-                    {isSelected && (
-                      <polygon
-                        points={points}
-                        fill="url(#yellow-neon)"
-                        fillOpacity="0.68"
-                        stroke="#FFFCE0"
-                        strokeWidth="3.2"
-                        filter="url(#glow-yellow)"
-                        className="pointer-events-none"
-                      />
-                    )}
-
-                    {/* Legal Quiet Move: Soft Yellow Glow + Crisp Center Dot */}
-                    {legalInfo && !legalInfo.isCapture && (
-                      <g className="pointer-events-none animate-tile-glow">
+                      {isSelected && (
                         <polygon
                           points={points}
                           fill="url(#yellow-neon)"
-                          fillOpacity="0.48"
-                          stroke="#FFF48C"
-                          strokeWidth="2.4"
+                          fillOpacity="0.68"
+                          stroke="#FFFCE0"
+                          strokeWidth="3.2"
                           filter="url(#glow-yellow)"
+                          className="pointer-events-none"
                         />
-                        <ellipse
-                          cx={center.x}
-                          cy={center.y}
-                          rx="11"
-                          ry="6.5"
-                          fill="#FFFCE6"
-                          stroke="#D99B00"
-                          strokeWidth="2"
-                        />
-                      </g>
-                    )}
+                      )}
 
-                    {/* Legal Capture Target: Glowing Neon Blue Ring */}
-                    {legalInfo && legalInfo.isCapture && (
-                      <g className="pointer-events-none animate-tile-glow">
+                      {legalInfo && !legalInfo.isCapture && (
+                        <g className="pointer-events-none animate-tile-glow">
+                          <polygon
+                            points={points}
+                            fill="url(#yellow-neon)"
+                            fillOpacity="0.48"
+                            stroke="#FFF48C"
+                            strokeWidth="2.4"
+                            filter="url(#glow-yellow)"
+                          />
+                          <ellipse
+                            cx={center.x}
+                            cy={center.y}
+                            rx="11"
+                            ry="6.5"
+                            fill="#FFFCE6"
+                            stroke="#D99B00"
+                            strokeWidth="2"
+                          />
+                        </g>
+                      )}
+
+                      {legalInfo && legalInfo.isCapture && (
+                        <g className="pointer-events-none animate-tile-glow">
+                          <polygon
+                            points={points}
+                            fill="url(#blue-neon)"
+                            fillOpacity="0.62"
+                            stroke="#DDFBFF"
+                            strokeWidth="3.2"
+                            filter="url(#glow-blue)"
+                          />
+                          <ellipse
+                            cx={center.x}
+                            cy={center.y}
+                            rx="23"
+                            ry="13"
+                            fill="none"
+                            stroke="#FFFFFF"
+                            strokeWidth="2.6"
+                            strokeDasharray="6 4"
+                          />
+                        </g>
+                      )}
+
+                      {isCheckedKing && (
                         <polygon
                           points={points}
-                          fill="url(#blue-neon)"
-                          fillOpacity="0.62"
-                          stroke="#DDFBFF"
+                          fill="rgba(239, 68, 68, 0.65)"
+                          stroke="#FFE066"
                           strokeWidth="3.2"
-                          filter="url(#glow-blue)"
+                          className="pointer-events-none animate-tile-glow"
                         />
-                        <ellipse
-                          cx={center.x}
-                          cy={center.y}
-                          rx="23"
-                          ry="13"
-                          fill="none"
-                          stroke="#FFFFFF"
+                      )}
+
+                      {vr === 7 && (
+                        <text
+                          x={center.x - 16}
+                          y={center.y + 18}
+                          fontSize="12"
+                          fontFamily="'Archivo Black', sans-serif"
+                          fill="rgba(255, 252, 232, 0.9)"
+                          stroke="#1E3520"
                           strokeWidth="2.6"
-                          strokeDasharray="6 4"
-                        />
-                      </g>
-                    )}
+                          paintOrder="stroke"
+                          className="pointer-events-none"
+                        >
+                          {FILES[boardCol]}
+                        </text>
+                      )}
+                      {vc === 7 && (
+                        <text
+                          x={center.x + 12}
+                          y={center.y + 18}
+                          fontSize="12"
+                          fontFamily="'Archivo Black', sans-serif"
+                          fill="rgba(255, 252, 232, 0.9)"
+                          stroke="#1E3520"
+                          strokeWidth="2.6"
+                          paintOrder="stroke"
+                          className="pointer-events-none"
+                        >
+                          {RANKS[boardRow]}
+                        </text>
+                      )}
+                    </g>
+                  );
+                })
+              )}
+            </g>
+          )}
 
-                    {/* Checked King Alert */}
-                    {isCheckedKing && (
-                      <polygon
-                        points={points}
-                        fill="rgba(239, 68, 68, 0.65)"
-                        stroke="#FFE066"
-                        strokeWidth="3.2"
-                        className="pointer-events-none animate-tile-glow"
-                      />
-                    )}
+          {/* Glowing Surface Direction Arrows */}
+          {surfaceArrows.length > 0 && (
+            <g className="pointer-events-none">
+              {surfaceArrows.map((arr) => (
+                <polygon
+                  key={arr.id}
+                  points={arr.points}
+                  fill={arr.isCapture ? 'url(#blue-neon)' : 'url(#yellow-neon)'}
+                  fillOpacity="0.9"
+                  stroke="#FFFFFF"
+                  strokeWidth="1.6"
+                  filter={arr.isCapture ? 'url(#glow-blue)' : 'url(#glow-yellow)'}
+                />
+              ))}
+            </g>
+          )}
 
-                    {/* Subtle Edge Coordinates along front edges of /arena-bg.png board */}
-                    {vr === 7 && (
-                      <text
-                        x={center.x - 16}
-                        y={center.y + 18}
-                        fontSize="12"
-                        fontFamily="'Archivo Black', sans-serif"
-                        fill="rgba(255, 252, 232, 0.9)"
-                        stroke="#1E3520"
-                        strokeWidth="2.6"
-                        paintOrder="stroke"
-                        className="pointer-events-none"
-                      >
-                        {FILES[boardCol]}
-                      </text>
-                    )}
-                    {vc === 7 && (
-                      <text
-                        x={center.x + 12}
-                        y={center.y + 18}
-                        fontSize="12"
-                        fontFamily="'Archivo Black', sans-serif"
-                        fill="rgba(255, 252, 232, 0.9)"
-                        stroke="#1E3520"
-                        strokeWidth="2.6"
-                        paintOrder="stroke"
-                        className="pointer-events-none"
-                      >
-                        {RANKS[boardRow]}
-                      </text>
-                    )}
-                  </g>
-                );
-              })
-            )}
-          </g>
-        )}
+          {/* Floating "TAP UNTUK SERANG!" Speech Callout */}
+          {firstCaptureTarget && !disabled && (
+            (() => {
+              const pt = squareToBoardPoint(firstCaptureTarget, flipped, boardView);
+              const bx = Math.max(150, Math.min(ARENA_W - 150, pt.x));
+              const by = Math.max(66, pt.y - 84);
+              return (
+                <g className="pointer-events-none animate-tile-glow">
+                  <rect
+                    x={bx - 80}
+                    y={by - 21}
+                    width="160"
+                    height="32"
+                    rx="16"
+                    fill="#FFFDF5"
+                    stroke="#1E1A16"
+                    strokeWidth="2.8"
+                  />
+                  <polygon
+                    points={`${bx - 7},${by + 10} ${bx + 7},${by + 10} ${bx},${by + 20}`}
+                    fill="#FFFDF5"
+                    stroke="#1E1A16"
+                    strokeWidth="2.4"
+                  />
+                  <rect x={bx - 8} y={by + 6} width="16" height="6" fill="#FFFDF5" />
+                  <text
+                    x={bx}
+                    y={by - 1}
+                    textAnchor="middle"
+                    fontSize="12"
+                    fontFamily="'Archivo Black', sans-serif"
+                    fill="#C4302B"
+                  >
+                    {tapToAttackLabel}
+                  </text>
+                </g>
+              );
+            })()
+          )}
+        </svg>
 
-        {/* Glowing Surface Direction Arrows */}
-        {surfaceArrows.length > 0 && (
-          <g className="pointer-events-none">
-            {surfaceArrows.map((arr) => (
-              <polygon
-                key={arr.id}
-                points={arr.points}
-                fill={arr.isCapture ? 'url(#blue-neon)' : 'url(#yellow-neon)'}
-                fillOpacity="0.9"
-                stroke="#FFFFFF"
-                strokeWidth="1.6"
-                filter={arr.isCapture ? 'url(#glow-blue)' : 'url(#glow-yellow)'}
-              />
-            ))}
-          </g>
-        )}
-
-        {/* 2D FULL-BODY STANDING CHIBI SPRITES ON /arena-bg.png TILES */}
-        <g className="pointer-events-none">
-          {sortedPieces.map((p) => {
+        {/* 3. FOOT-ANCHORED STANDING CHIBI PIECES (`translate(-50%, -85%)`) AT (xPct%, yPct%) */}
+        <div className="absolute inset-0 pointer-events-none z-20">
+          {sortedPieces.map((p, idx) => {
             const isSelected = selectedSquare === p.sq;
             const isLastTo = lastMove?.to === p.sq;
             const isJumpingAttacker = attackJumpInfo?.targetSq === p.sq;
-            // Subtle perspective scale in iso mode: back pieces slightly smaller, front pieces slightly larger!
             const depthScale = isFlat ? 1 : 0.9 + ((p.vr + p.vc) / 14) * 0.16;
-            const spriteW = (isFlat ? 70 : 78) * depthScale;
-            const spriteH = (isFlat ? 80 : 90) * depthScale;
-
-            const drawX = p.x - spriteW / 2;
-            const drawY = isFlat ? p.y - spriteH + 22 : p.y - spriteH + 14;
+            const widthPct = ((isFlat ? 70 : 76) * depthScale * 100) / ARENA_W;
+            const heightPct = ((isFlat ? 81 : 88) * depthScale * 100) / ARENA_H;
             const idleDelay = `${(((p.vr * 7 + p.vc * 3) % 9) * 0.24).toFixed(2)}s`;
 
             const animClass = isJumpingAttacker
@@ -763,13 +829,23 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
                   ? 'animate-piece-hop'
                   : 'animate-piece-idle';
 
+            const kingEmote = p.type === 'k' ? activeEmotes[p.color] : undefined;
+
             return (
-              <g
+              <div
                 key={`${p.sq}-${p.color}-${p.type}-${isJumpingAttacker ? attackJumpInfo?.id : 0}`}
-                transform={`translate(${drawX}, ${drawY})`}
+                className="absolute"
+                style={{
+                  left: `${p.xPct}%`,
+                  top: `${p.yPct}%`,
+                  width: `${widthPct}%`,
+                  height: `${heightPct}%`,
+                  transform: 'translate(-50%, -85%)',
+                  zIndex: idx + 1,
+                }}
               >
-                <g
-                  className={animClass}
+                <div
+                  className={`w-full h-full ${animClass}`}
                   style={
                     isJumpingAttacker && attackJumpInfo
                       ? ({
@@ -781,146 +857,74 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
                         : undefined
                   }
                 >
-                  <svg width={spriteW} height={spriteH} viewBox="0 0 110 128" overflow="visible">
-                    <AnimalPiece
-                      color={p.color}
-                      type={p.type}
-                      showBadge={isSelected}
-                      showShadow
-                    />
-                  </svg>
-                </g>
-              </g>
+                  <AnimalPiece
+                    color={p.color}
+                    type={p.type}
+                    showBadge={isSelected}
+                    showShadow
+                  />
+                </div>
+
+                {/* Comic Emote Speech Bubble floating cleanly above King's head */}
+                {kingEmote && (
+                  <div
+                    key={kingEmote.id}
+                    className="absolute left-1/2 -top-7 px-3 py-1 rounded-full bg-[#FFF9DB] border-2 border-[#1F1A17] shadow-md font-display text-xs text-[#241C14] whitespace-nowrap animate-emote-pop z-40"
+                  >
+                    {kingEmote.text}
+                  </div>
+                )}
+              </div>
             );
           })}
-        </g>
 
-        {/* CAPTURED ENEMY PIECES ON THE OUTER GARDEN LAWNS */}
-        {leftBenchCoords.length > 0 && (
-          <g className="pointer-events-none">
-            {leftBenchCoords.map((item, idx) => (
-              <g
-                key={item.key}
-                transform={`translate(${item.x - 26}, ${item.y - 46})`}
-                opacity="0.96"
+          {/* Captured Enemy Pieces anchored along Left & Right Outer Lawns */}
+          {leftBenchCoords.map((item, idx) => (
+            <div
+              key={item.key}
+              className="absolute"
+              style={{
+                left: `${item.xPct}%`,
+                top: `${item.yPct}%`,
+                width: `${(52 / ARENA_W) * 100}%`,
+                height: `${(60 / ARENA_H) * 100}%`,
+                transform: 'translate(-50%, -85%)',
+              }}
+            >
+              <div
+                className="w-full h-full animate-piece-idle"
+                style={{ animationDelay: `${(idx * 0.3).toFixed(2)}s` }}
               >
-                <g
-                  className="animate-piece-idle"
-                  style={{ animationDelay: `${(idx * 0.3).toFixed(2)}s` }}
-                >
-                  <svg width="52" height="60" viewBox="0 0 110 128" overflow="visible">
-                    <AnimalPiece color="b" type={item.pieceType} showBadge={false} showShadow />
-                  </svg>
-                </g>
-              </g>
-            ))}
-          </g>
-        )}
+                <AnimalPiece color="b" type={item.pieceType} showBadge={false} showShadow />
+              </div>
+            </div>
+          ))}
 
-        {rightBenchCoords.length > 0 && (
-          <g className="pointer-events-none">
-            {rightBenchCoords.map((item, idx) => (
-              <g
-                key={item.key}
-                transform={`translate(${item.x - 26}, ${item.y - 46})`}
-                opacity="0.96"
+          {rightBenchCoords.map((item, idx) => (
+            <div
+              key={item.key}
+              className="absolute"
+              style={{
+                left: `${item.xPct}%`,
+                top: `${item.yPct}%`,
+                width: `${(52 / ARENA_W) * 100}%`,
+                height: `${(60 / ARENA_H) * 100}%`,
+                transform: 'translate(-50%, -85%)',
+              }}
+            >
+              <div
+                className="w-full h-full animate-piece-idle"
+                style={{ animationDelay: `${(idx * 0.33).toFixed(2)}s` }}
               >
-                <g
-                  className="animate-piece-idle"
-                  style={{ animationDelay: `${(idx * 0.33).toFixed(2)}s` }}
-                >
-                  <svg width="52" height="60" viewBox="0 0 110 128" overflow="visible">
-                    <AnimalPiece color="w" type={item.pieceType} showBadge={false} showShadow />
-                  </svg>
-                </g>
-              </g>
-            ))}
-          </g>
-        )}
+                <AnimalPiece color="w" type={item.pieceType} showBadge={false} showShadow />
+              </div>
+            </div>
+          ))}
+        </div>
 
-        {/* Floating "TAP UNTUK SERANG!" Speech Callout */}
-        {firstCaptureTarget && !disabled && (
-          (() => {
-            const pt = squareToBoardPoint(firstCaptureTarget, flipped, boardView);
-            const bx = Math.max(150, Math.min(ARENA_W - 150, pt.x));
-            const by = Math.max(66, pt.y - 84);
-            return (
-              <g className="pointer-events-none animate-tile-glow">
-                <rect
-                  x={bx - 80}
-                  y={by - 21}
-                  width="160"
-                  height="32"
-                  rx="16"
-                  fill="#FFFDF5"
-                  stroke="#1E1A16"
-                  strokeWidth="2.8"
-                />
-                <polygon
-                  points={`${bx - 7},${by + 10} ${bx + 7},${by + 10} ${bx},${by + 20}`}
-                  fill="#FFFDF5"
-                  stroke="#1E1A16"
-                  strokeWidth="2.4"
-                />
-                <rect x={bx - 8} y={by + 6} width="16" height="6" fill="#FFFDF5" />
-                <text
-                  x={bx}
-                  y={by - 1}
-                  textAnchor="middle"
-                  fontSize="12"
-                  fontFamily="'Archivo Black', sans-serif"
-                  fill="#C4302B"
-                >
-                  {tapToAttackLabel}
-                </text>
-              </g>
-            );
-          })()
-        )}
-
-        {/* Comic Emote Speech Bubbles anchored above Kings */}
-        {sortedPieces
-          .filter((p) => p.type === 'k' && activeEmotes[p.color])
-          .map((king) => {
-            const emote = activeEmotes[king.color]!;
-            const bx = Math.max(120, Math.min(ARENA_W - 120, king.x));
-            const by = Math.max(66, king.y - 90);
-            return (
-              <g key={emote.id} className="pointer-events-none">
-                <rect
-                  x={bx - 66}
-                  y={by - 22}
-                  width="132"
-                  height="34"
-                  rx="17"
-                  fill="#FFF9DB"
-                  stroke="#1F1A17"
-                  strokeWidth="2.8"
-                />
-                <polygon
-                  points={`${bx - 7},${by + 10} ${bx + 7},${by + 10} ${bx},${by + 20}`}
-                  fill="#FFF9DB"
-                  stroke="#1F1A17"
-                  strokeWidth="2.4"
-                />
-                <rect x={bx - 8} y={by + 6} width="16" height="6" fill="#FFF9DB" />
-                <text
-                  x={bx}
-                  y={by - 1}
-                  textAnchor="middle"
-                  fontSize="13.5"
-                  fontFamily="'Archivo Black', sans-serif"
-                  fill="#241C14"
-                >
-                  {emote.text}
-                </text>
-              </g>
-            );
-          })}
-      </svg>
-
-      {/* Pixel-Locked HTML5 Canvas 1.2s SLASH! Energy VFX Overlay */}
-      <SkillVfxCanvas event={vfxEvent} flipped={flipped} boardView={boardView} />
+        {/* 4. Pixel-Locked HTML5 Canvas 1.2s SLASH! Energy VFX Overlay */}
+        <SkillVfxCanvas event={vfxEvent} flipped={flipped} boardView={boardView} />
+      </div>
     </div>
   );
 };

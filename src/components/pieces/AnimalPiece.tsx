@@ -30,7 +30,7 @@ export const AnimalPiece: React.FC<AnimalPieceProps> = React.memo(
 
     return (
       <svg
-        viewBox="0 0 110 128"
+        viewBox="0 0 110 134"
         className={`select-none pointer-events-none overflow-visible ${className}`}
         xmlns="http://www.w3.org/2000/svg"
         aria-label={`${isCat ? 'Cat Kingdom' : 'Dog Guard'} ${type.toUpperCase()}`}

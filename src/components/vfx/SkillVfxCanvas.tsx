@@ -1,12 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 import type { SkillVfxEvent } from '../../types/game';
-import {
-  ARENA_H,
-  ARENA_W,
-  computeCoverTransform,
-  squareToBoardPoint,
-  type BoardView,
-} from '../board/isometric';
+import { ARENA_H, ARENA_W, squareToBoardPoint, type BoardView } from '../board/isometric';
 
 interface SkillVfxCanvasProps {
   event: SkillVfxEvent | null;
@@ -150,8 +144,9 @@ function drawBlueGoldSlashArc(
 }
 
 /**
- * High-DPI HTML5 Canvas 1.2s non-blocking VFX Engine pixel-locked onto /arena-bg.png
- * using identical cover/meet transform math as the interactive SVG layer.
+ * High-DPI HTML5 Canvas 1.2s non-blocking VFX Engine mounted inside the exact same
+ * fixed-aspect stage container as /arena-bg.png and the 8x8 SVG polygon overlay,
+ * guaranteeing 1:1 pixel alignment at every viewport size.
  */
 export const SkillVfxCanvas: React.FC<SkillVfxCanvasProps> = ({
   event,
@@ -184,12 +179,10 @@ export const SkillVfxCanvas: React.FC<SkillVfxCanvasProps> = ({
     canvas.width = Math.round(width * dpr);
     canvas.height = Math.round(height * dpr);
 
-    // Match the SVG preserveAspectRatio exactly:
-    // - On iso mode: use 'slice' (cover) on wide viewports, or 'meet' on very narrow portrait so full board stays visible
-    const isNarrowPortrait = width / height < 1.15;
-    const aspectMode: 'slice' | 'meet' =
-      boardView === 'iso' && !isNarrowPortrait ? 'slice' : 'meet';
-    const { scale, offsetX, offsetY } = computeCoverTransform(width, height, aspectMode);
+    // Since canvas sits inside the exact 1456x720 aspect-locked stage container,
+    // scaleX === scaleY directly!
+    const scaleX = width / ARENA_W;
+    const scaleY = height / ARENA_H;
 
     const fromPt = squareToBoardPoint(event.from, flipped, boardView);
     const toPt = squareToBoardPoint(event.to, flipped, boardView);
@@ -235,10 +228,8 @@ export const SkillVfxCanvas: React.FC<SkillVfxCanvasProps> = ({
       const t = Math.min(1, (now - startTime) / VFX_DURATION_MS);
 
       ctx.save();
-      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-      ctx.clearRect(0, 0, width, height);
-      ctx.translate(offsetX, offsetY);
-      ctx.scale(scale, scale);
+      ctx.setTransform(dpr * scaleX, 0, 0, dpr * scaleY, 0, 0);
+      ctx.clearRect(0, 0, ARENA_W, ARENA_H);
 
       const fade = Math.max(0, 1 - t);
 
