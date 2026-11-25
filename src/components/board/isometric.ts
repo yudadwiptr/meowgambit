@@ -14,12 +14,12 @@ export const ARENA_H = 720;
 export const OFFSET_X = 0;
 export const OFFSET_Y = 0;
 
-// Calibrated 4 outer corners of the 8x8 grass board on /arena-bg.png (in %)
+// Calibrated 4 inner stone-wall corners of the grass area on /arena-bg.png (in %)
 export const BOARD_CORNERS_PCT = {
-  top: { x: 50.69, y: 14.1 },
-  right: { x: 76.37, y: 44.86 },
-  bottom: { x: 50.31, y: 77.08 },
-  left: { x: 24.24, y: 44.86 },
+  top: { x: 50.69, y: 14.25 },
+  right: { x: 76.15, y: 44.86 },
+  bottom: { x: 50.31, y: 76.85 },
+  left: { x: 24.45, y: 44.86 },
 };
 
 const W_TOP = 1.025;

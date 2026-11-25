@@ -337,8 +337,56 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
               <stop offset="0%" stopColor="#7CF2FF" />
               <stop offset="100%" stopColor="#1EC8FF" />
             </linearGradient>
+            {/* Palette color-matched directly from /arena-bg.png & /arena-bg-flat.png */}
+            <linearGradient id="arena-grass-light" x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" stopColor="#B1DE63" />
+              <stop offset="100%" stopColor="#99D159" />
+            </linearGradient>
+            <linearGradient id="arena-grass-dark" x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" stopColor="#92B073" />
+              <stop offset="100%" stopColor="#7D9E67" />
+            </linearGradient>
+            <linearGradient id="arena-sun-wash" x1="0%" y1="0%" x2="85%" y2="85%">
+              <stop offset="0%" stopColor="#FFF7AD" stopOpacity="0.30" />
+              <stop offset="45%" stopColor="#FFF7AD" stopOpacity="0.06" />
+              <stop offset="100%" stopColor="#1B361D" stopOpacity="0.10" />
+            </linearGradient>
           </defs>
 
+          {/* Layer A: True 8x8 color-matched grass tiles seamlessly replacing 7x7 / 8x9 painted inner grid */}
+          <g className="pointer-events-none">
+            {Array.from({ length: 8 }, (_, vr) =>
+              Array.from({ length: 8 }, (_, vc) => {
+                const boardRow = flipped ? 7 - vr : vr;
+                const boardCol = flipped ? 7 - vc : vc;
+                const isLight = (boardRow + boardCol) % 2 === 0;
+                return (
+                  <polygon
+                    key={`base-${vr}-${vc}`}
+                    points={boardTilePoints(vr, vc, boardView)}
+                    fill={isLight ? 'url(#arena-grass-light)' : 'url(#arena-grass-dark)'}
+                    stroke="#5D7D4B"
+                    strokeWidth="1.2"
+                    strokeOpacity="0.72"
+                  />
+                );
+              })
+            )}
+            {/* Warm sunlight wash & subtle inner stone-wall shadow rim blending seamlessly into PNG */}
+            <polygon
+              points={[
+                boardTilePoints(0, 0, boardView).split(' ')[0],
+                boardTilePoints(0, 7, boardView).split(' ')[1],
+                boardTilePoints(7, 7, boardView).split(' ')[2],
+                boardTilePoints(7, 0, boardView).split(' ')[3],
+              ].join(' ')}
+              fill="url(#arena-sun-wash)"
+              stroke="rgba(35, 52, 28, 0.55)"
+              strokeWidth="3"
+            />
+          </g>
+
+          {/* Layer B: Interactive 8x8 Hit Targets, Bright Neon Highlights & Coordinates */}
           <g>
             {Array.from({ length: 8 }, (_, vr) =>
               Array.from({ length: 8 }, (_, vc) => {
@@ -362,7 +410,6 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
                     onClick={() => !disabled && onSquareClick(sq)}
                     className={disabled ? 'cursor-default' : 'cursor-pointer'}
                   >
-                    {/* Transparent exact-fit bilinear polygon directly over PNG grass tile */}
                     <polygon
                       points={points}
                       fill="transparent"
