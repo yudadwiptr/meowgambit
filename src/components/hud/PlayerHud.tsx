@@ -12,16 +12,16 @@ interface PlayerHudProps {
   isActive: boolean;
   isThinking: boolean;
   isInCheck: boolean;
-  hpPercent: number; // 0..100 based on remaining army material
-  energyPercent: number; // 0..100 fills with moves/captures
-  score: number; // total captured points
+  hpPercent: number;
+  energyPercent: number;
+  score: number;
   capturedPieces: PieceSymbol[];
   t: TranslationPack;
 }
 
 /**
- * Casual Cartoon Mobile-First Player Profile Card (Top-Left for Cat Kingdom, Top-Right for Dog Guard)
- * matching the reference layout: rounded glossy frame, avatar, HP bar, Energy bar, and Piece Score badge.
+ * Casual Cartoon Mobile-First Player Profile Card (Top-Left for Cat Kingdom, Top-Right for Dog Guard).
+ * Widened cleanly so "KERAJAAN KUCING" and "GARDA ANJING" always display in full without ellipsis truncation.
  */
 export const PlayerHud: React.FC<PlayerHudProps> = ({
   color,
@@ -42,13 +42,17 @@ export const PlayerHud: React.FC<PlayerHudProps> = ({
   const enemyColor: Color = isCat ? 'b' : 'w';
 
   return (
-    <div className={`flex flex-col ${isRight ? 'items-end' : 'items-start'} gap-1 max-w-[44vw] sm:max-w-[230px]`}>
+    <div
+      className={`flex flex-col ${
+        isRight ? 'items-end' : 'items-start'
+      } gap-1 w-auto min-w-[168px] sm:min-w-[270px] max-w-[44vw] sm:max-w-[340px]`}
+    >
       {/* Main Glossy Profile Card */}
       <div
-        className={`relative flex items-center gap-2 px-2 py-1.5 sm:px-2.5 sm:py-2 w-full transition-all ${
+        className={`relative flex items-center gap-2 sm:gap-2.5 px-2.5 py-1.5 sm:px-3 sm:py-2 w-full transition-all ${
           isCat ? 'hud-card-blue' : 'hud-card-red'
         } ${isRight ? 'flex-row-reverse text-right' : 'flex-row text-left'} ${
-          isActive ? 'ring-2 ring-[#FFE45E] brightness-105' : 'opacity-90'
+          isActive ? 'ring-2 ring-[#FFE45E] brightness-105' : 'opacity-92'
         }`}
       >
         {/* Character Avatar Frame */}
@@ -64,13 +68,17 @@ export const PlayerHud: React.FC<PlayerHudProps> = ({
           </div>
         </div>
 
-        {/* Name + HP Bar + Energy Bar */}
+        {/* Full Name (No Ellipsis!) + HP Bar + Energy Bar */}
         <div className="min-w-0 flex-1 flex flex-col gap-1">
-          <div className={`flex items-center gap-1 ${isRight ? 'justify-end' : 'justify-start'}`}>
-            <span className="font-display text-[11px] sm:text-xs text-white cartoon-text-shadow truncate leading-none">
+          <div
+            className={`flex items-center gap-1.5 flex-wrap ${
+              isRight ? 'justify-end' : 'justify-start'
+            }`}
+          >
+            <span className="font-display text-[10.5px] sm:text-[13px] text-white cartoon-text-shadow whitespace-nowrap leading-none">
               {label}
             </span>
-            <span className="hidden sm:inline-block px-1.5 py-[1px] rounded-full bg-black/35 text-[9px] font-bold text-[#FFE885] uppercase leading-tight shrink-0">
+            <span className="hidden sm:inline-block px-1.5 py-[1px] rounded-full bg-black/35 text-[9px] font-bold text-[#FFE885] uppercase leading-tight whitespace-nowrap shrink-0">
               {sublabel}
             </span>
           </div>
@@ -103,7 +111,7 @@ export const PlayerHud: React.FC<PlayerHudProps> = ({
           <span
             className={`absolute -bottom-2.5 ${
               isRight ? 'left-2' : 'right-2'
-            } px-2 py-0.5 rounded-full text-[9px] font-display uppercase border border-black/80 shadow-md animate-pulse ${
+            } px-2 py-0.5 rounded-full text-[9px] font-display uppercase border border-black/80 shadow-md animate-pulse whitespace-nowrap ${
               isInCheck ? 'bg-[#EF4444] text-white' : 'bg-[#FFE259] text-[#2B1B04]'
             }`}
           >
@@ -112,9 +120,9 @@ export const PlayerHud: React.FC<PlayerHudProps> = ({
         )}
       </div>
 
-      {/* Piece Score & Captured Strip right underneath (persis ikon benteng + 0 di referensi!) */}
+      {/* Piece Score & Captured Mini Strip underneath */}
       <div
-        className={`flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-[#182E22]/75 border border-white/15 shadow-sm ${
+        className={`flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-[#162B1F]/80 border border-white/15 shadow-sm ${
           isRight ? 'flex-row-reverse' : 'flex-row'
         }`}
       >

@@ -208,12 +208,50 @@
 
 /* Selected Piece Idle Float */
 @keyframes piece-float {
-  0%, 100% { transform: translateY(-6px) scale(1.07); }
-  50% { transform: translateY(-11px) scale(1.09); }
+  0%, 100% { transform: translateY(-7px) scale(1.07); }
+  50% { transform: translateY(-13px) scale(1.1); }
 }
 
 .animate-piece-float {
   animation: piece-float 0.95s ease-in-out infinite;
+}
+
+/* Gentle Living Idle Breathing / Subtle Bounce for Standing Chibi Pieces */
+@keyframes piece-idle {
+  0%, 100% { transform: translateY(0px) scaleY(1) scaleX(1); }
+  50% { transform: translateY(-2.4px) scaleY(1.03) scaleX(0.985); }
+}
+
+.animate-piece-idle {
+  transform-box: fill-box;
+  transform-origin: bottom center;
+  animation: piece-idle 2.3s ease-in-out infinite;
+}
+
+/* Ambient Floating Leaves & Flower Petals Drift */
+@keyframes leaf-drift {
+  0% {
+    transform: translate3d(-40px, -30px, 0) rotate(0deg);
+    opacity: 0;
+  }
+  12% {
+    opacity: 0.85;
+  }
+  50% {
+    transform: translate3d(42vw, 44vh, 0) rotate(175deg);
+    opacity: 0.78;
+  }
+  88% {
+    opacity: 0.7;
+  }
+  100% {
+    transform: translate3d(88vw, 96vh, 0) rotate(350deg);
+    opacity: 0;
+  }
+}
+
+.animate-leaf-drift {
+  animation: leaf-drift var(--drift-dur, 18s) linear var(--drift-delay, 0s) infinite;
 }
 
 /* Glowing Tile Pulse */

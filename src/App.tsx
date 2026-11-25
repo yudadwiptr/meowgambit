@@ -29,6 +29,7 @@ import { getPieceMeta, PIECE_VALUES, TIME_CONTROL_SECONDS } from './data/roster'
 import { computeBotMove } from './engine/chessAI';
 import { soundEngine } from './engine/soundEngine';
 import { ChessBoard } from './components/board/ChessBoard';
+import { GardenBackdrop } from './components/board/GardenBackdrop';
 import { PlayerHud } from './components/hud/PlayerHud';
 import { ActionCluster } from './components/hud/ActionCluster';
 import { PromotionModal } from './components/modals/PromotionModal';
@@ -696,9 +697,35 @@ export default function App() {
   }
 
   return (
-    <div className="h-[100dvh] w-full garden-bg overflow-hidden relative flex flex-col justify-between">
-      {/* === TOP HUD BAR: Player 1 (Left) | Match Timer + Mini Utils (Center) | Player 2 (Right) === */}
-      <header className="relative z-20 w-full px-2.5 pt-2 sm:px-5 sm:pt-3 flex items-start justify-between gap-2 pointer-events-none">
+    <div className="h-[100dvh] w-full garden-bg overflow-hidden relative">
+      {/* === RICH 2D CASTLE GARDEN SCENERY & FLOATING LEAVES/PETALS === */}
+      <GardenBackdrop />
+
+      {/* === CENTER ARENA: ENLARGED (+22–25%) 2.5D ISOMETRIC GARDEN DIORAMA ISLAND === */}
+      <main className="relative z-10 w-full h-full flex items-center justify-center px-1 sm:px-3 pt-10 pb-6 sm:pt-12 sm:pb-6">
+        <div className="w-full max-w-[min(100vw,calc((100dvh-54px)*1.62),1260px)]">
+          <ChessBoard
+            chess={chess}
+            fen={fen}
+            flipped={effectiveFlipped}
+            selectedSquare={selectedSquare}
+            legalMoves={legalMovesForSelected}
+            lastMove={lastMove}
+            vfxEvent={vfxEvent}
+            isShaking={isShaking}
+            activeEmotes={activeEmotes}
+            disabled={isPlayerInteractionBlocked}
+            tapToAttackLabel={t.tapToAttack}
+            hintMove={hintMove}
+            capturedByWhite={armyStats.capturedByWhite}
+            capturedByBlack={armyStats.capturedByBlack}
+            onSquareClick={handleSquareClick}
+          />
+        </div>
+      </main>
+
+      {/* === FLOATING TOP HUD BAR: Player 1 (Left) | Match Timer + Mini Utils (Center) | Player 2 (Right) === */}
+      <header className="absolute top-0 inset-x-0 z-20 w-full px-2.5 pt-2 sm:px-5 sm:pt-3 flex items-start justify-between gap-2 pointer-events-none">
         {/* Left: Player 1 (Cat Kingdom / White) */}
         <div className="pointer-events-auto">
           <PlayerHud
@@ -725,7 +752,6 @@ export default function App() {
 
         {/* Center: Match Timer Pill + Compact Utility Buttons */}
         <div className="pointer-events-auto flex flex-col items-center gap-1.5 shrink-0">
-          {/* Central Dark Pill Match Clock (persis 08:45 di referensi!) */}
           <div
             className={`flex items-center gap-1.5 px-3 py-1 sm:px-4 sm:py-1.5 rounded-full border-2 border-[#16241F] shadow-lg transition-colors ${
               isClockLow
@@ -745,7 +771,6 @@ export default function App() {
             />
           </div>
 
-          {/* Subtle Casual Utility Row */}
           <div className="flex items-center gap-1">
             <button
               type="button"
@@ -833,38 +858,17 @@ export default function App() {
         </div>
       </header>
 
-      {/* === CENTER ARENA: 2.5D ISOMETRIC GARDEN DIORAMA CHESSBOARD === */}
-      <main className="relative z-10 flex-1 min-h-0 w-full flex items-center justify-center px-1 sm:px-4">
-        <div className="w-full max-w-[min(98vw,calc((100dvh-135px)*1.6),1060px)]">
-          <ChessBoard
-            chess={chess}
-            fen={fen}
-            flipped={effectiveFlipped}
-            selectedSquare={selectedSquare}
-            legalMoves={legalMovesForSelected}
-            lastMove={lastMove}
-            vfxEvent={vfxEvent}
-            isShaking={isShaking}
-            activeEmotes={activeEmotes}
-            disabled={isPlayerInteractionBlocked}
-            tapToAttackLabel={t.tapToAttack}
-            hintMove={hintMove}
-            onSquareClick={handleSquareClick}
-          />
-        </div>
-      </main>
-
-      {/* === BOTTOM BAR: Compact Skill Log Pill (Left) & Casual Mobile Action Cluster (Right) === */}
-      <footer className="relative z-20 w-full px-2.5 pb-2.5 sm:px-5 sm:pb-3.5 flex items-end justify-between gap-2 pointer-events-none">
-        {/* Bottom-Left: Soft Skill Feed & Mini Move History Pill */}
-        <div className="pointer-events-auto hidden md:flex flex-col gap-1 max-w-[290px]">
-          <div className="casual-panel-dark px-3 py-1.5 flex items-center gap-2 text-[#FFF7D6]">
-            <Sparkles className="w-3.5 h-3.5 text-[#FFE259] shrink-0" />
-            <span className="font-display text-[11px] uppercase truncate">{lastSkillLog}</span>
+      {/* === FLOATING BOTTOM BAR: Full-Width Skill Instruction Pill (Left) & Action Cluster (Right) === */}
+      <footer className="absolute bottom-0 inset-x-0 z-20 w-full px-2.5 pb-2.5 sm:px-5 sm:pb-3.5 flex items-end justify-between gap-3 pointer-events-none">
+        {/* Bottom-Left: Widened Skill Feed Pill (Full text, zero ellipsis truncation!) */}
+        <div className="pointer-events-auto hidden md:flex flex-col gap-1.5 max-w-[460px]">
+          <div className="casual-panel-dark px-3.5 py-2 flex items-center gap-2 text-[#FFF7D6]">
+            <Sparkles className="w-4 h-4 text-[#FFE259] shrink-0" />
+            <span className="font-display text-xs uppercase leading-snug">{lastSkillLog}</span>
           </div>
           {moveRecords.length > 0 && (
             <div className="flex items-center gap-1 flex-wrap px-1">
-              {moveRecords.slice(-5).map((rec, i) => (
+              {moveRecords.slice(-6).map((rec, i) => (
                 <span
                   key={`${rec.moveNumber}-${rec.color}-${i}`}
                   className={`px-2 py-0.5 rounded-full text-[10px] font-display border border-black/40 ${
@@ -885,7 +889,7 @@ export default function App() {
         {/* Spacer on mobile so ActionCluster stays cleanly anchored bottom-right */}
         <div className="flex-1 md:hidden" />
 
-        {/* Bottom-Right: Casual Game Action Cluster (Undo/Surrender, Skill Cards, Emote, SKILL, Golden Paw) */}
+        {/* Bottom-Right: Casual Game Action Cluster */}
         <div className="pointer-events-auto">
           <ActionCluster
             t={t}
