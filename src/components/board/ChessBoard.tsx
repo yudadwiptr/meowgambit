@@ -770,8 +770,9 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
             const isLastTo = lastMove?.to === p.sq;
             const isJumpingAttacker = attackJumpInfo?.targetSq === p.sq;
             const depthScale = isFlat ? 1 : 0.9 + ((p.vr + p.vc) / 14) * 0.16;
-            const widthPct = ((isFlat ? 58 : 76) * depthScale * 100) / stage.w;
-            const heightPct = ((isFlat ? 68 : 88) * depthScale * 100) / stage.h;
+            const roleBoost = p.type === 'k' || p.type === 'q' || p.type === 'n' ? 1.12 : 1.0;
+            const widthPct = ((isFlat ? 64 : 82) * depthScale * roleBoost * 100) / stage.w;
+            const heightPct = ((isFlat ? 72 : 90) * depthScale * roleBoost * 100) / stage.h;
             const idleDelay = `${(((p.vr * 7 + p.vc * 3) % 9) * 0.24).toFixed(2)}s`;
 
             const animClass = isJumpingAttacker
@@ -793,7 +794,7 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
                   top: `${p.yPct}%`,
                   width: `${widthPct}%`,
                   height: `${heightPct}%`,
-                  transform: isFlat ? 'translate(-50%, -82%)' : 'translate(-50%, -85%)',
+                  transform: isFlat ? 'translate(-50%, -86%)' : 'translate(-50%, -88%)',
                   zIndex: idx + 1,
                 }}
               >

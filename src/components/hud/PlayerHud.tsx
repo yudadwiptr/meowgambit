@@ -55,17 +55,15 @@ export const PlayerHud: React.FC<PlayerHudProps> = ({
           isActive ? 'ring-2 ring-[#FFE45E] brightness-105' : 'opacity-92'
         }`}
       >
-        {/* Character Avatar Frame */}
+        {/* Character Avatar Frame (King Sprite!) */}
         <div
-          className={`shrink-0 w-9 h-9 sm:w-12 sm:h-12 rounded-xl border-2 border-[#1F1A17] overflow-hidden flex items-center justify-center shadow-inner ${
+          className={`shrink-0 w-9 h-9 sm:w-12 sm:h-12 rounded-xl border-2 border-[#1F1A17] overflow-hidden flex items-center justify-center p-0.5 shadow-inner ${
             isCat
               ? 'bg-gradient-to-b from-[#DCEEFF] to-[#A6CEF2]'
               : 'bg-gradient-to-b from-[#F5D6CE] to-[#C48C7E]'
           }`}
         >
-          <div className="w-[115%] h-[115%] translate-y-1">
-            <AnimalPiece color={color} type="k" showBadge={false} showShadow={false} />
-          </div>
+          <AnimalPiece color={color} type="k" showBadge={false} showShadow={false} className="w-full h-full" />
         </div>
 
         {/* Full Name (No Ellipsis!) + HP Bar + Energy Bar */}
