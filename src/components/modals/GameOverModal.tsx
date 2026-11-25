@@ -1,6 +1,6 @@
 import React from 'react';
-import { Home, RotateCcw, Trophy } from 'lucide-react';
-import type { GameOutcome } from '../../types/game';
+import { Home, Loader2, RotateCcw, Trophy, WifiOff } from 'lucide-react';
+import type { GameOutcome, RematchState } from '../../types/game';
 import type { TranslationPack } from '../../i18n/translations';
 import { AnimalPiece } from '../pieces/AnimalPiece';
 
@@ -8,6 +8,9 @@ interface GameOverModalProps {
   outcome: GameOutcome;
   totalMoves: number;
   t: TranslationPack;
+  isOnline?: boolean;
+  onlineDisconnected?: boolean;
+  rematchState?: RematchState;
   onRematch: () => void;
   onMainMenu: () => void;
 }
@@ -16,6 +19,9 @@ export const GameOverModal: React.FC<GameOverModalProps> = ({
   outcome,
   totalMoves,
   t,
+  isOnline = false,
+  onlineDisconnected = false,
+  rematchState = 'none',
   onRematch,
   onMainMenu,
 }) => {
@@ -25,6 +31,8 @@ export const GameOverModal: React.FC<GameOverModalProps> = ({
     : outcome.winner === 'w'
       ? 'from-[#5DA9E9] to-[#2B669E]'
       : 'from-[#D95B4E] to-[#962D25]';
+
+  const rematchDisabled = isOnline && (onlineDisconnected || rematchState === 'offered_by_me');
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/65 p-4 backdrop-blur-sm">
@@ -46,7 +54,7 @@ export const GameOverModal: React.FC<GameOverModalProps> = ({
         </div>
 
         {/* Mascot Showcase & Stats */}
-        <div className="p-4 flex flex-col items-center gap-4">
+        <div className="p-4 flex flex-col items-center gap-3.5">
           <div className="flex items-center justify-center gap-4">
             {outcome.winner === 'draw' ? (
               <>
@@ -82,19 +90,48 @@ export const GameOverModal: React.FC<GameOverModalProps> = ({
             </div>
           </div>
 
+          {/* Online Rematch Status Banner */}
+          {isOnline && onlineDisconnected && (
+            <div className="w-full rounded-xl bg-[#B83227] border border-[#59130D] px-3 py-1.5 flex items-center justify-center gap-1.5 text-xs font-bold text-white">
+              <WifiOff className="w-4 h-4 shrink-0" />
+              <span>{t.opponentDisconnectedTitle}</span>
+            </div>
+          )}
+
+          {isOnline && !onlineDisconnected && rematchState === 'offered_by_opponent' && (
+            <div className="w-full rounded-xl bg-[#FFF2A6] border-2 border-[#C98E16] px-3 py-1.5 text-center font-display text-xs uppercase text-[#4A2E05] animate-pulse">
+              {t.rematchOfferedByOpponent}
+            </div>
+          )}
+
           <div className="w-full grid grid-cols-2 gap-2.5">
             <button
               type="button"
+              disabled={rematchDisabled}
               onClick={onRematch}
-              className="casual-btn casual-btn-green font-display text-sm uppercase py-3 flex items-center justify-center gap-1.5"
+              className="casual-btn casual-btn-green font-display text-xs sm:text-sm uppercase py-3 px-2 flex items-center justify-center gap-1.5 text-white"
             >
-              <RotateCcw className="w-4 h-4" />
-              {t.rematchBtn}
+              {rematchState === 'offered_by_me' ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin shrink-0" />
+                  <span className="cartoon-text-shadow-bold">{t.rematchOfferedByMe}</span>
+                </>
+              ) : rematchState === 'offered_by_opponent' ? (
+                <>
+                  <RotateCcw className="w-4 h-4 shrink-0" />
+                  <span className="cartoon-text-shadow-bold">{t.acceptRematchBtn}</span>
+                </>
+              ) : (
+                <>
+                  <RotateCcw className="w-4 h-4 shrink-0" />
+                  <span className="cartoon-text-shadow-bold">{t.rematchBtn}</span>
+                </>
+              )}
             </button>
             <button
               type="button"
               onClick={onMainMenu}
-              className="casual-btn casual-btn-amber font-display text-sm uppercase py-3 flex items-center justify-center gap-1.5"
+              className="casual-btn casual-btn-amber font-display text-xs sm:text-sm uppercase py-3 flex items-center justify-center gap-1.5"
             >
               <Home className="w-4 h-4" />
               {t.menuBtn}

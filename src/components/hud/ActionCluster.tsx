@@ -6,6 +6,7 @@ import type { TranslationPack } from '../../i18n/translations';
 interface ActionClusterProps {
   t: TranslationPack;
   canUndo: boolean;
+  hideUndo?: boolean;
   disabled: boolean;
   hasSkillReady: boolean;
   onUndo: () => void;
@@ -25,6 +26,7 @@ const EMOTE_KEYS: EmoteKey[] = ['meow', 'hiss', 'woof', 'gg'];
 export const ActionCluster: React.FC<ActionClusterProps> = ({
   t,
   canUndo,
+  hideUndo = false,
   disabled,
   hasSkillReady,
   onUndo,
@@ -73,32 +75,38 @@ export const ActionCluster: React.FC<ActionClusterProps> = ({
           </button>
         )}
         <div className="flex items-center gap-1">
-          <button
-            type="button"
-            onClick={() => {
-              setConfirmSurrender(false);
-              onUndo();
-            }}
-            disabled={!canUndo || disabled}
-            className="casual-orb w-11 h-11 sm:w-12 sm:h-12 bg-gradient-to-b from-[#D95B4E] to-[#A6332A] text-white flex flex-col items-center justify-center"
-            title={t.undoBtn}
-            aria-label={t.undoBtn}
-          >
-            <Undo2 className="w-4 h-4 sm:w-5 sm:h-5" />
-          </button>
+          {!hideUndo && (
+            <button
+              type="button"
+              onClick={() => {
+                setConfirmSurrender(false);
+                onUndo();
+              }}
+              disabled={!canUndo || disabled}
+              className="casual-orb w-11 h-11 sm:w-12 sm:h-12 bg-gradient-to-b from-[#D95B4E] to-[#A6332A] text-white flex flex-col items-center justify-center"
+              title={t.undoBtn}
+              aria-label={t.undoBtn}
+            >
+              <Undo2 className="w-4 h-4 sm:w-5 sm:h-5" />
+            </button>
+          )}
           <button
             type="button"
             onClick={() => setConfirmSurrender((v) => !v)}
             disabled={disabled}
-            className="casual-orb w-8 h-8 sm:w-9 sm:h-9 bg-gradient-to-b from-[#6C584C] to-[#4A3B32] text-[#FFE8B6] flex items-center justify-center"
+            className={`casual-orb ${
+              hideUndo
+                ? 'w-11 h-11 sm:w-12 sm:h-12 bg-gradient-to-b from-[#D95B4E] to-[#A6332A] text-white'
+                : 'w-8 h-8 sm:w-9 sm:h-9 bg-gradient-to-b from-[#6C584C] to-[#4A3B32] text-[#FFE8B6]'
+            } flex items-center justify-center`}
             title={t.surrenderBtn}
             aria-label={t.surrenderBtn}
           >
-            <Flag className="w-3.5 h-3.5" />
+            <Flag className={hideUndo ? 'w-4 h-4 sm:w-5 sm:h-5' : 'w-3.5 h-3.5'} />
           </button>
         </div>
         <span className="font-display text-[8px] sm:text-[9px] text-[#E6F2E9] cartoon-text-shadow uppercase tracking-tight">
-          {t.undoBtn}
+          {hideUndo ? t.surrenderBtn : t.undoBtn}
         </span>
       </div>
 

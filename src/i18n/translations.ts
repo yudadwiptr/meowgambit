@@ -23,6 +23,33 @@ export interface TranslationPack {
   gameMode: string;
   vsBot: string;
   local2p: string;
+  onlineMabar: string;
+  createRoomTab: string;
+  joinRoomTab: string;
+  roomCodeLabel: string;
+  creatingRoom: string;
+  waitingOpponent: string;
+  connectingRoom: (code: string) => string;
+  copyCodeBtn: string;
+  copyLinkBtn: string;
+  copiedLabel: string;
+  enterRoomPlaceholder: string;
+  joinBattleBtn: string;
+  regenerateRoomBtn: string;
+  cancelRoomBtn: string;
+  onlineErrorNotFound: string;
+  onlineErrorTimeout: string;
+  onlineErrorNetwork: string;
+  onlineHostHint: string;
+  onlineGuestHint: string;
+  opponentLabel: string;
+  opponentTurnBadge: string;
+  yourTurnBadge: string;
+  opponentDisconnectedTitle: string;
+  opponentDisconnectedDesc: string;
+  rematchOfferedByMe: string;
+  rematchOfferedByOpponent: string;
+  acceptRematchBtn: string;
   aiDifficulty: string;
   difficultyLabels: Record<Difficulty, { label: string; desc: string }>;
   playAs: string;
@@ -128,6 +155,33 @@ export const TRANSLATIONS: Record<Language, TranslationPack> = {
     gameMode: 'MODE PERMAINAN',
     vsBot: 'LAWAN BOT',
     local2p: '2P LOKAL',
+    onlineMabar: 'ONLINE MABAR',
+    createRoomTab: 'BUAT ROOM',
+    joinRoomTab: 'GABUNG ROOM',
+    roomCodeLabel: 'KODE ROOM KAMU',
+    creatingRoom: 'Membuat room...',
+    waitingOpponent: 'Menunggu lawan bergabung...',
+    connectingRoom: (code) => `Menghubungkan ke room ${code}...`,
+    copyCodeBtn: 'SALIN KODE',
+    copyLinkBtn: 'SALIN LINK',
+    copiedLabel: 'TERSALIN!',
+    enterRoomPlaceholder: 'CONTOH: CAT88',
+    joinBattleBtn: 'GABUNG TARUNG!',
+    regenerateRoomBtn: 'KODE BARU',
+    cancelRoomBtn: 'BATAL',
+    onlineErrorNotFound: 'Room tidak ditemukan. Cek lagi kodenya!',
+    onlineErrorTimeout: 'Waktu habis. Pastikan Host sudah membuka room!',
+    onlineErrorNetwork: 'Koneksi P2P gagal. Coba lagi sebentar.',
+    onlineHostHint: 'Kamu bermain sebagai Kerajaan Kucing (Putih)',
+    onlineGuestHint: 'Kamu bermain sebagai Garda Anjing (Hitam)',
+    opponentLabel: 'LAWAN',
+    opponentTurnBadge: 'GILIRAN LAWAN...',
+    yourTurnBadge: 'GILIRANMU!',
+    opponentDisconnectedTitle: 'KONEKSI LAWAN TERPUTUS!',
+    opponentDisconnectedDesc: 'Lawan keluar dari room atau kehilangan sinyal.',
+    rematchOfferedByMe: 'MENUNGGU LAWAN...',
+    rematchOfferedByOpponent: 'Lawan mengajak Main Lagi!',
+    acceptRematchBtn: 'TERIMA MAIN LAGI!',
     aiDifficulty: 'LEVEL BOT AI',
     difficultyLabels: {
       easy: { label: 'MUDAH', desc: 'Depth 1 • Santai' },
@@ -334,6 +388,33 @@ export const TRANSLATIONS: Record<Language, TranslationPack> = {
     gameMode: 'GAME MODE',
     vsBot: 'VS BOT',
     local2p: '2P LOCAL',
+    onlineMabar: 'ONLINE 1V1',
+    createRoomTab: 'CREATE ROOM',
+    joinRoomTab: 'JOIN ROOM',
+    roomCodeLabel: 'YOUR ROOM CODE',
+    creatingRoom: 'Creating room...',
+    waitingOpponent: 'Waiting for opponent to join...',
+    connectingRoom: (code) => `Connecting to room ${code}...`,
+    copyCodeBtn: 'COPY CODE',
+    copyLinkBtn: 'COPY INVITE',
+    copiedLabel: 'COPIED!',
+    enterRoomPlaceholder: 'E.G. CAT88',
+    joinBattleBtn: 'JOIN BATTLE!',
+    regenerateRoomBtn: 'NEW CODE',
+    cancelRoomBtn: 'CANCEL',
+    onlineErrorNotFound: 'Room not found. Double-check the room code!',
+    onlineErrorTimeout: 'Connection timed out. Make sure the host room is open!',
+    onlineErrorNetwork: 'P2P connection error. Please try again.',
+    onlineHostHint: 'You play as Cat Kingdom (White)',
+    onlineGuestHint: 'You play as Dog Guard (Black)',
+    opponentLabel: 'OPPONENT',
+    opponentTurnBadge: "OPPONENT'S TURN...",
+    yourTurnBadge: 'YOUR TURN!',
+    opponentDisconnectedTitle: 'OPPONENT DISCONNECTED!',
+    opponentDisconnectedDesc: 'Your opponent left the room or lost connection.',
+    rematchOfferedByMe: 'WAITING FOR OPPONENT...',
+    rematchOfferedByOpponent: 'Opponent wants a Rematch!',
+    acceptRematchBtn: 'ACCEPT REMATCH!',
     aiDifficulty: 'AI DIFFICULTY',
     difficultyLabels: {
       easy: { label: 'EASY', desc: 'Depth 1 • Playful' },

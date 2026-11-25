@@ -1,9 +1,37 @@
 import type { Color, PieceSymbol, Square } from 'chess.js';
 
-export type GameMode = 'bot' | 'local';
+export type GameMode = 'bot' | 'local' | 'online';
 export type Difficulty = 'easy' | 'medium' | 'hard';
 export type TimeControl = 'blitz' | 'rapid' | 'unlimited';
 export type EmoteKey = 'meow' | 'hiss' | 'woof' | 'gg';
+export type OnlineRole = 'host' | 'guest';
+export type OnlineConnectionStatus =
+  | 'idle'
+  | 'creating'
+  | 'waiting'
+  | 'joining'
+  | 'connected'
+  | 'disconnected'
+  | 'error';
+
+export type RematchState = 'none' | 'offered_by_me' | 'offered_by_opponent';
+
+export type OnlineMessage =
+  | { type: 'hello' }
+  | { type: 'start'; timeControl: TimeControl }
+  | {
+      type: 'move';
+      from: Square;
+      to: Square;
+      promotion?: 'q' | 'r' | 'b' | 'n';
+      fen: string;
+      clocks?: { w: number | null; b: number | null };
+    }
+  | { type: 'emote'; emote: EmoteKey; color: Color }
+  | { type: 'surrender'; loserColor: Color }
+  | { type: 'timeout'; loserColor: Color }
+  | { type: 'rematch_offer' }
+  | { type: 'rematch_accept' };
 
 export interface GameConfig {
   mode: GameMode;
