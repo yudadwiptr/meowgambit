@@ -1093,10 +1093,10 @@ export default function App() {
         />
       </main>
 
-      {/* === COMPACT FLOATING TOP HUD BAR === */}
-      <header className="absolute top-0 inset-x-0 z-20 w-full px-2.5 pt-2 sm:px-4 sm:pt-2.5 flex items-start justify-between gap-2 pointer-events-none">
+      {/* === RESPONSIVE FLOATING TOP HUD BAR (Mobile: 2-row both players visible | Desktop: 3-column 1-row) === */}
+      <header className="absolute top-0 inset-x-0 z-20 w-full px-2 pt-2 sm:px-4 sm:pt-2.5 flex flex-wrap sm:flex-nowrap items-start justify-between gap-1.5 sm:gap-2 pointer-events-none">
         {/* Left: Player 1 (Cat Kingdom / White) */}
-        <div className="pointer-events-auto">
+        <div className="pointer-events-auto order-1 w-[48.5%] sm:w-auto">
           <PlayerHud
             color="w"
             align="left"
@@ -1126,9 +1126,9 @@ export default function App() {
           />
         </div>
 
-        {/* Center: Compact Single-Row Match Timer + Utility Strip */}
-        <div className="pointer-events-auto flex flex-col items-center gap-1">
-          <div className="flex flex-wrap items-center justify-center gap-1.5 bg-[#1C2E24]/85 backdrop-blur-[2px] px-2 py-1 rounded-full border-2 border-[#132018] shadow-lg">
+        {/* Center on desktop / Row 2 centered on mobile: Compact Match Timer + Utility Strip */}
+        <div className="pointer-events-auto order-3 sm:order-2 w-full sm:w-auto flex flex-col items-center gap-1">
+          <div className="flex items-center justify-center gap-1.5 bg-[#1C2E24]/85 backdrop-blur-[2px] px-2 py-1 rounded-full border-2 border-[#132018] shadow-lg max-w-full">
             {isOnlineMatch && roomCode && (
               <span className="hidden sm:inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-[#2488D8] text-white font-display text-[10px] tracking-wider">
                 <Wifi className="w-3 h-3" />
@@ -1252,7 +1252,7 @@ export default function App() {
         </div>
 
         {/* Right: Player 2 (Dog Guard / Black) */}
-        <div className="pointer-events-auto">
+        <div className="pointer-events-auto order-2 sm:order-3 w-[48.5%] sm:w-auto">
           <PlayerHud
             color="b"
             align="right"

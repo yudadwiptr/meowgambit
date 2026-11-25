@@ -112,19 +112,28 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
     return { w, h: w / ratio };
   };
 
-  const [stageDims, setStageDims] = useState<{ w: number; h: number }>(() => {
-    if (typeof window === 'undefined') return { w: stage.w, h: stage.h };
-    return computeStageDims(window.innerWidth, window.innerHeight, boardView);
-  });
+  const [viewportInfo, setViewportInfo] = useState<{ vw: number; vh: number }>(() =>
+    typeof window === 'undefined'
+      ? { vw: stage.w, vh: stage.h }
+      : { vw: window.innerWidth, vh: window.innerHeight }
+  );
+
+  const stageDims = useMemo(
+    () => computeStageDims(viewportInfo.vw, viewportInfo.vh, boardView),
+    [viewportInfo.vw, viewportInfo.vh, boardView]
+  );
+
+  // Detect when vertical letterboxing would appear on tall portrait mobile screens
+  const needsVerticalExtend = stageDims.h < viewportInfo.vh - 4;
 
   useEffect(() => {
     const onResize = () => {
-      setStageDims(computeStageDims(window.innerWidth, window.innerHeight, boardView));
+      setViewportInfo({ vw: window.innerWidth, vh: window.innerHeight });
     };
     onResize();
     window.addEventListener('resize', onResize);
     return () => window.removeEventListener('resize', onResize);
-  }, [boardView]);
+  }, []);
 
   const boardMatrix = useMemo(() => {
     void fen;
@@ -286,10 +295,89 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
   );
 
   return (
-    <div className="relative w-full h-full overflow-hidden flex items-center justify-center bg-[#23422D] select-none">
+    <div className="relative w-full h-full overflow-hidden flex items-center justify-center bg-[#5E9A43] select-none">
+      {/* =================================================================
+          SEAMLESS FULL-HEIGHT GARDEN EXTENSION FOR TALL MOBILE PORTRAIT
+          Eliminates top & bottom empty bars completely with matched lawn,
+          soft ambient artwork bleed, sunlight, and subtle grass tufts!
+         ================================================================= */}
+      {needsVerticalExtend && (
+        <div className="absolute inset-0 pointer-events-none overflow-hidden">
+          {/* Stretched blurred artwork bleed so top & bottom hues match 1:1 seamlessly */}
+          <div
+            className="absolute -inset-6 scale-110"
+            style={{
+              backgroundImage: `url('${stage.imageUrl}')`,
+              backgroundSize: 'cover',
+              backgroundPosition: 'center',
+              filter: 'blur(18px) saturate(1.08) brightness(0.98)',
+            }}
+          />
+          {/* Warm garden grass & sunlight vertical tint unifying top & bottom extensions */}
+          <div
+            className="absolute inset-0"
+            style={{
+              background:
+                'linear-gradient(180deg, rgba(164, 206, 98, 0.45) 0%, rgba(118, 178, 72, 0.18) 22%, rgba(0, 0, 0, 0) 45%, rgba(84, 140, 56, 0.25) 78%, rgba(54, 102, 46, 0.62) 100%)',
+            }}
+          />
+          {/* Decorative cartoon grass blades, flowers & corner bushes filling top/bottom lawn naturally */}
+          <svg
+            viewBox="0 0 400 860"
+            preserveAspectRatio="xMidYMid slice"
+            className="absolute inset-0 w-full h-full opacity-85"
+            aria-hidden="true"
+          >
+            {/* Top-left warm sunbeam continuing seamlessly into the board */}
+            <defs>
+              <linearGradient id="mob-sun" x1="0%" y1="0%" x2="70%" y2="45%">
+                <stop offset="0%" stopColor="#FFF7B0" stopOpacity="0.45" />
+                <stop offset="100%" stopColor="#FFF7B0" stopOpacity="0" />
+              </linearGradient>
+            </defs>
+            <polygon points="0,0 240,0 320,300 0,240" fill="url(#mob-sun)" />
+
+            {/* Soft top corner foliage */}
+            <g stroke="#1E341D" strokeWidth="2.4" opacity="0.72">
+              <circle cx="14" cy="18" r="46" fill="#5D9E47" />
+              <circle cx="62" cy="8" r="34" fill="#6BB04F" />
+              <circle cx="386" cy="20" r="48" fill="#3D783D" />
+              <circle cx="338" cy="6" r="32" fill="#4B8C45" />
+            </g>
+
+            {/* Bottom lawn stepping stones, grass tufts, flowers & lush corner bushes */}
+            <g opacity="0.88">
+              <ellipse cx="78" cy="742" rx="22" ry="10" fill="#A59C8C" stroke="#2D2720" strokeWidth="2" />
+              <ellipse cx="132" cy="774" rx="26" ry="11" fill="#9A9182" stroke="#2D2720" strokeWidth="2" />
+              <ellipse cx="298" cy="748" rx="22" ry="10" fill="#A59C8C" stroke="#2D2720" strokeWidth="2" />
+              {/* Cute tiny flowers on bottom meadow */}
+              <circle cx="52" cy="705" r="4.5" fill="#FF92B9" stroke="#1E1A17" strokeWidth="1.3" />
+              <circle cx="52" cy="705" r="1.8" fill="#FFE666" />
+              <circle cx="188" cy="738" r="4.5" fill="#FFE666" stroke="#1E1A17" strokeWidth="1.3" />
+              <circle cx="242" cy="788" r="4.2" fill="#82D4FF" stroke="#1E1A17" strokeWidth="1.3" />
+              <circle cx="348" cy="712" r="4.5" fill="#FF92B9" stroke="#1E1A17" strokeWidth="1.3" />
+              {/* Grass blades */}
+              <path
+                d="M95 708 L92 699 M99 709 L101 701 M215 712 L212 703 M220 713 L222 705 M322 786 L319 777 M327 787 L330 779"
+                stroke="#2E5E2C"
+                strokeWidth="2"
+                strokeLinecap="round"
+              />
+              {/* Bottom corner bushes */}
+              <g stroke="#182C19" strokeWidth="2.4">
+                <circle cx="8" cy="842" r="52" fill="#37733B" />
+                <circle cx="58" cy="856" r="38" fill="#468A45" />
+                <circle cx="392" cy="845" r="54" fill="#326B37" />
+                <circle cx="342" cy="858" r="36" fill="#408242" />
+              </g>
+            </g>
+          </svg>
+        </div>
+      )}
+
       {/* =================================================================
           SINGLE FIXED-ASPECT STAGE CONTAINER (Matches native image ratio!)
-          Background PNG + 4-Corner Bilinear SVG <polygon> Grid +
+          Background PNG/JPG + 4-Corner Bilinear SVG <polygon> Grid +
           Foot-Anchored Chibi Pieces + Canvas VFX — ZERO DRIFT ON RESIZE!
          ================================================================= */}
       <div
@@ -299,12 +387,22 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
           height: `${stageDims.h}px`,
         }}
       >
-        {/* 1. Authentic Arena Artwork (/arena-bg.png or /arena-bg-flat.png — crisp, zero blur!) */}
+        {/* 1. Authentic Arena Artwork with soft vertical feather blend on tall mobile screens */}
         <img
           src={stage.imageUrl}
           alt=""
           draggable={false}
           className="absolute inset-0 w-full h-full object-fill pointer-events-none select-none block"
+          style={
+            needsVerticalExtend
+              ? {
+                  WebkitMaskImage:
+                    'linear-gradient(to bottom, transparent 0%, black 9%, black 91%, transparent 100%)',
+                  maskImage:
+                    'linear-gradient(to bottom, transparent 0%, black 9%, black 91%, transparent 100%)',
+                }
+              : undefined
+          }
         />
 
         {/* 2. Transparent 8x8 Bilinear SVG <polygon> Interactive Overlay */}

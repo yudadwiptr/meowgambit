@@ -45,11 +45,11 @@ export const PlayerHud: React.FC<PlayerHudProps> = ({
     <div
       className={`flex flex-col ${
         isRight ? 'items-end' : 'items-start'
-      } gap-1 w-auto min-w-[168px] sm:min-w-[270px] max-w-[44vw] sm:max-w-[340px]`}
+      } gap-1 w-full sm:w-auto sm:min-w-[260px] sm:max-w-[330px]`}
     >
       {/* Main Glossy Profile Card */}
       <div
-        className={`relative flex items-center gap-2 sm:gap-2.5 px-2.5 py-1.5 sm:px-3 sm:py-2 w-full transition-all ${
+        className={`relative flex items-center gap-1.5 sm:gap-2.5 px-2 py-1.5 sm:px-3 sm:py-2 w-full transition-all ${
           isCat ? 'hud-card-blue' : 'hud-card-red'
         } ${isRight ? 'flex-row-reverse text-right' : 'flex-row text-left'} ${
           isActive ? 'ring-2 ring-[#FFE45E] brightness-105' : 'opacity-92'
@@ -57,7 +57,7 @@ export const PlayerHud: React.FC<PlayerHudProps> = ({
       >
         {/* Character Avatar Frame */}
         <div
-          className={`shrink-0 w-10 h-10 sm:w-12 sm:h-12 rounded-xl border-2 border-[#1F1A17] overflow-hidden flex items-center justify-center shadow-inner ${
+          className={`shrink-0 w-9 h-9 sm:w-12 sm:h-12 rounded-xl border-2 border-[#1F1A17] overflow-hidden flex items-center justify-center shadow-inner ${
             isCat
               ? 'bg-gradient-to-b from-[#DCEEFF] to-[#A6CEF2]'
               : 'bg-gradient-to-b from-[#F5D6CE] to-[#C48C7E]'
@@ -71,14 +71,14 @@ export const PlayerHud: React.FC<PlayerHudProps> = ({
         {/* Full Name (No Ellipsis!) + HP Bar + Energy Bar */}
         <div className="min-w-0 flex-1 flex flex-col gap-1">
           <div
-            className={`flex items-center gap-1.5 flex-wrap ${
+            className={`flex items-center gap-1 flex-wrap ${
               isRight ? 'justify-end' : 'justify-start'
             }`}
           >
-            <span className="font-display text-[10.5px] sm:text-[13px] text-white cartoon-text-shadow whitespace-nowrap leading-none">
+            <span className="font-display text-[9.5px] sm:text-[13px] text-white cartoon-text-shadow whitespace-nowrap leading-none">
               {label}
             </span>
-            <span className="hidden sm:inline-block px-1.5 py-[1px] rounded-full bg-black/35 text-[9px] font-bold text-[#FFE885] uppercase leading-tight whitespace-nowrap shrink-0">
+            <span className="hidden md:inline-block px-1.5 py-[1px] rounded-full bg-black/35 text-[9px] font-bold text-[#FFE885] uppercase leading-tight whitespace-nowrap shrink-0">
               {sublabel}
             </span>
           </div>
