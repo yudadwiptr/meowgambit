@@ -1,9 +1,10 @@
-const CACHE_NAME = 'meowgambit-v3';
+const CACHE_NAME = 'meowgambit-v4';
 const ASSETS_TO_CACHE = [
   '/',
   '/index.html',
   '/manifest.json',
   '/logo.png',
+  '/lobby-bg.png',
   '/favicon.png',
   '/icon-192.png',
   '/icon-512.png',
@@ -11,7 +12,7 @@ const ASSETS_TO_CACHE = [
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => cache.addAll(ASSETS_TO_CACHE)).catch(() => {})
+    caches.open(CACHE_NAME).then((cache) => cache.addAll(ASSETS_TO_CACHE)).catch(() => { })
   );
   self.skipWaiting();
 });
