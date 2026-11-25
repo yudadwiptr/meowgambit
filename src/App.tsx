@@ -1,9 +1,11 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Chess, type Color, type Move, type PieceSymbol, type Square } from 'chess.js';
 import {
+  Box,
   Clock,
   FlipVertical2,
   Globe,
+  Grid2x2,
   Home,
   RotateCcw,
   Sparkles,
@@ -29,6 +31,7 @@ import { getPieceMeta, PIECE_VALUES, TIME_CONTROL_SECONDS } from './data/roster'
 import { computeBotMove } from './engine/chessAI';
 import { soundEngine } from './engine/soundEngine';
 import { ChessBoard } from './components/board/ChessBoard';
+import type { BoardView } from './components/board/isometric';
 import { GardenBackdrop } from './components/board/GardenBackdrop';
 import { PlayerHud } from './components/hud/PlayerHud';
 import { ActionCluster } from './components/hud/ActionCluster';
@@ -173,6 +176,10 @@ export default function App() {
   const [pendingPromotion, setPendingPromotion] = useState<PendingPromotion | null>(null);
   const [outcome, setOutcome] = useState<GameOutcome | null>(null);
   const [manualFlipped, setManualFlipped] = useState<boolean>(false);
+  const [boardView, setBoardView] = useState<BoardView>(() => {
+    if (typeof window === 'undefined') return 'iso';
+    return window.localStorage.getItem('meowgambit_view') === 'flat' ? 'flat' : 'iso';
+  });
   const [isBotThinking, setIsBotThinking] = useState<boolean>(false);
 
   // Timers (in milliseconds, null if Unlimited)
@@ -657,6 +664,19 @@ export default function App() {
     soundEngine.playKingAura();
   }, [isPlayerInteractionBlocked, t]);
 
+  const handleToggleBoardView = useCallback(() => {
+    setBoardView((prev) => {
+      const next: BoardView = prev === 'iso' ? 'flat' : 'iso';
+      try {
+        window.localStorage.setItem('meowgambit_view', next);
+      } catch {
+        // ignore
+      }
+      return next;
+    });
+    soundEngine.playSelect();
+  }, []);
+
   const handleToggleMute = useCallback(() => {
     const nextMuted = soundEngine.toggleMute();
     setMuted(nextMuted);
@@ -708,6 +728,7 @@ export default function App() {
             chess={chess}
             fen={fen}
             flipped={effectiveFlipped}
+            boardView={boardView}
             selectedSquare={selectedSquare}
             legalMoves={legalMovesForSelected}
             lastMove={lastMove}
@@ -772,6 +793,27 @@ export default function App() {
           </div>
 
           <div className="flex items-center gap-1">
+            <button
+              type="button"
+              onClick={handleToggleBoardView}
+              className={`casual-btn px-2 py-1 text-[10px] font-display flex items-center gap-1 ${
+                boardView === 'flat' ? 'casual-btn-green text-white' : 'casual-btn-amber'
+              }`}
+              title={t.viewToggleTitle}
+              aria-label={t.viewToggleTitle}
+            >
+              {boardView === 'flat' ? (
+                <>
+                  <Grid2x2 className="w-3 h-3" />
+                  <span className="cartoon-text-shadow-bold">{t.viewFlatLabel}</span>
+                </>
+              ) : (
+                <>
+                  <Box className="w-3 h-3" />
+                  <span>{t.viewIsoLabel}</span>
+                </>
+              )}
+            </button>
             <button
               type="button"
               onClick={handleToggleLang}

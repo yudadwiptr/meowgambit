@@ -59,6 +59,9 @@ export interface TranslationPack {
   autoOnBtn: string;
   autoOffBtn: string;
   resetBtn: string;
+  viewFlatLabel: string;
+  viewIsoLabel: string;
+  viewToggleTitle: string;
   usedSkillLog: (unitName: string, skillName: string, suffix: string) => string;
 
   // Canvas VFX callouts
@@ -169,6 +172,9 @@ export const TRANSLATIONS: Record<Language, TranslationPack> = {
     autoOnBtn: 'AUTO:ON',
     autoOffBtn: 'AUTO:OFF',
     resetBtn: 'ULANG',
+    viewFlatLabel: 'RATA',
+    viewIsoLabel: '2.5D',
+    viewToggleTitle: 'Ubah sudut papan (2.5D Miring / Rata Lurus)',
     usedSkillLog: (unit, skill, suffix) => `${unit} KELUARKAN ${skill}!${suffix}`,
 
     vfxCheck: 'SKAK!!',
@@ -372,6 +378,9 @@ export const TRANSLATIONS: Record<Language, TranslationPack> = {
     autoOnBtn: 'AUTO:ON',
     autoOffBtn: 'AUTO:OFF',
     resetBtn: 'RESET',
+    viewFlatLabel: 'FLAT',
+    viewIsoLabel: '2.5D',
+    viewToggleTitle: 'Toggle board angle (2.5D Isometric / Flat Straight)',
     usedSkillLog: (unit, skill, suffix) => `${unit} USED ${skill}!${suffix}`,
 
     vfxCheck: 'CHECK!!',

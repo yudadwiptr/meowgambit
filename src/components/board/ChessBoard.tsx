@@ -4,21 +4,27 @@ import type { ActiveEmote, SkillVfxEvent } from '../../types/game';
 import { AnimalPiece } from '../pieces/AnimalPiece';
 import { SkillVfxCanvas } from '../vfx/SkillVfxCanvas';
 import {
+  FLAT_ORIGIN_X,
+  FLAT_ORIGIN_Y,
+  FLAT_TILE,
   ISO_CX,
   ISO_TH,
   ISO_TOP_Y,
   ISO_TW,
   ISO_VIEW_H,
   ISO_VIEW_W,
+  flatGridCenter,
   isoGridCenter,
   isoTilePoints,
-  squareToIso,
+  squareToBoardPoint,
+  type BoardView,
 } from './isometric';
 
 interface ChessBoardProps {
   chess: Chess;
   fen: string;
   flipped: boolean;
+  boardView: BoardView;
   selectedSquare: Square | null;
   legalMoves: Move[];
   lastMove: { from: Square; to: Square } | null;
@@ -36,7 +42,7 @@ interface ChessBoardProps {
 const FILES = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'];
 const RANKS = ['8', '7', '6', '5', '4', '3', '2', '1'];
 
-/** Helper to build a clean glowing isometric arrow polygon along the grass surface */
+/** Helper to build a clean glowing arrow polygon along the board grass surface */
 function buildSurfaceArrow(from: { x: number; y: number }, to: { x: number; y: number }) {
   const dx = to.x - from.x;
   const dy = to.y - from.y;
@@ -83,11 +89,8 @@ const StoneBlock: React.FC<{
   hasMoss?: boolean;
 }> = ({ x, y, rx = 20, ry = 12, shade = '#9FA9AC', hasCrack = false, hasMoss = false }) => (
   <g>
-    {/* Deep stone base thickness */}
     <ellipse cx={x + 1} cy={y + 7} rx={rx} ry={ry * 0.9} fill="#535D60" stroke="#1C1917" strokeWidth="2.4" />
-    {/* Main top stone face */}
     <ellipse cx={x} cy={y} rx={rx} ry={ry} fill={shade} stroke="#1C1917" strokeWidth="2.4" />
-    {/* Top specular highlight */}
     <ellipse
       cx={x - rx * 0.26}
       cy={y - ry * 0.34}
@@ -95,7 +98,6 @@ const StoneBlock: React.FC<{
       ry={ry * 0.24}
       fill="rgba(255,255,255,0.42)"
     />
-    {/* Stone crack detail */}
     {hasCrack && (
       <path
         d={`M${x - 4} ${y - 4} L${x + 1} ${y + 1} L${x - 2} ${y + 6}`}
@@ -106,7 +108,6 @@ const StoneBlock: React.FC<{
         strokeLinejoin="round"
       />
     )}
-    {/* Hanging green moss patch */}
     {hasMoss && (
       <path
         d={`M${x + rx * 0.15} ${y - ry * 0.35} Q${x + rx * 0.52} ${y + ry * 0.05} ${x + rx * 0.42} ${y + ry * 0.72} Q${x + rx * 0.12} ${y + ry * 0.55} ${x - rx * 0.05} ${y + ry * 0.8} Q${x - rx * 0.18} ${y + ry * 0.2} ${x + rx * 0.15} ${y - ry * 0.35} Z`}
@@ -176,6 +177,7 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
   chess,
   fen,
   flipped,
+  boardView,
   selectedSquare,
   legalMoves,
   lastMove,
@@ -189,6 +191,8 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
   capturedByBlack,
   onSquareClick,
 }) => {
+  const isFlat = boardView === 'flat';
+
   const boardMatrix = useMemo(() => {
     void fen;
     return chess.board();
@@ -197,7 +201,6 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
   const inCheck = chess.inCheck();
   const currentTurn = chess.turn();
 
-  // Map legal target squares
   const legalTargetMap = useMemo(() => {
     const map = new Map<Square, { isCapture: boolean; move: Move }>();
     for (const m of legalMoves) {
@@ -207,7 +210,7 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
     return map;
   }, [legalMoves]);
 
-  // Collect pieces sorted back-to-front (Painter's Algorithm: vr + vc ascending)
+  // Collect pieces sorted back-to-front (Painter's Algorithm)
   const sortedPieces = useMemo(() => {
     const items: Array<{
       sq: Square;
@@ -224,7 +227,7 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
         const piece = boardMatrix[r][c];
         if (!piece) continue;
         const sq = `${FILES[c]}${RANKS[r]}` as Square;
-        const pos = squareToIso(sq, flipped);
+        const pos = squareToBoardPoint(sq, flipped, boardView);
         items.push({
           sq,
           color: piece.color,
@@ -237,9 +240,13 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
       }
     }
 
-    items.sort((a, b) => a.vr + a.vc - (b.vr + b.vc) || a.x - b.x);
+    if (isFlat) {
+      items.sort((a, b) => a.vr - b.vr || a.vc - b.vc);
+    } else {
+      items.sort((a, b) => a.vr + a.vc - (b.vr + b.vc) || a.x - b.x);
+    }
     return items;
-  }, [boardMatrix, flipped]);
+  }, [boardMatrix, flipped, boardView, isFlat]);
 
   const checkedKingSquare = useMemo(() => {
     if (!inCheck) return undefined;
@@ -254,14 +261,13 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
     return null;
   }, [legalTargetMap]);
 
-  // Diamond corners for board walls & deep 2.5D floating island cliff
+  // === ISOMETRIC GEOMETRY ===
   const topCorner = { x: ISO_CX, y: ISO_TOP_Y };
   const rightCorner = { x: ISO_CX + 8 * ISO_TW, y: ISO_TOP_Y + 8 * ISO_TH };
   const bottomCorner = { x: ISO_CX, y: ISO_TOP_Y + 16 * ISO_TH };
   const leftCorner = { x: ISO_CX - 8 * ISO_TW, y: ISO_TOP_Y + 8 * ISO_TH };
-  const slabDepth = 60; // Deep 2.5D cliff & brickwork island thickness!
+  const slabDepth = 60;
 
-  // Perimeter thick stone blocks with cracks & moss
   const backLeftStones = useMemo(
     () =>
       Array.from({ length: 10 }, (_, i) => {
@@ -322,20 +328,17 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
     [bottomCorner.x, bottomCorner.y, rightCorner.x, rightCorner.y]
   );
 
-  // 2.5D Brick courses along the deep front-left & front-right island cliff faces
   const cliffBricksLeft = useMemo(() => {
-    const bricks: Array<{ pts: string; fill: string; moss?: boolean }> = [];
-    const rows = 2;
-    const cols = 7;
+    const bricks: Array<{ pts: string; fill: string }> = [];
     const dx = bottomCorner.x - leftCorner.x;
     const dy = bottomCorner.y - leftCorner.y;
-    for (let r = 0; r < rows; r++) {
+    for (let r = 0; r < 2; r++) {
       const y0 = 18 + r * 20;
       const y1 = y0 + 18;
       const offset = r % 2 === 0 ? 0 : 0.06;
-      for (let c = 0; c < cols; c++) {
-        const t0 = Math.max(0.02, c / cols + offset);
-        const t1 = Math.min(0.98, (c + 0.92) / cols + offset);
+      for (let c = 0; c < 7; c++) {
+        const t0 = Math.max(0.02, c / 7 + offset);
+        const t1 = Math.min(0.98, (c + 0.92) / 7 + offset);
         if (t1 <= t0 + 0.03) continue;
         const x0 = leftCorner.x + dx * t0;
         const yy0 = leftCorner.y + dy * t0;
@@ -344,7 +347,6 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
         bricks.push({
           pts: `${x0},${yy0 + y0} ${x1},${yy1 + y0} ${x1},${yy1 + y1} ${x0},${yy0 + y1}`,
           fill: (r + c) % 2 === 0 ? '#A49889' : '#8E8274',
-          moss: r === 0 && c % 3 === 1,
         });
       }
     }
@@ -353,17 +355,15 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
 
   const cliffBricksRight = useMemo(() => {
     const bricks: Array<{ pts: string; fill: string }> = [];
-    const rows = 2;
-    const cols = 7;
     const dx = rightCorner.x - bottomCorner.x;
     const dy = rightCorner.y - bottomCorner.y;
-    for (let r = 0; r < rows; r++) {
+    for (let r = 0; r < 2; r++) {
       const y0 = 18 + r * 20;
       const y1 = y0 + 18;
       const offset = r % 2 === 0 ? 0.05 : 0;
-      for (let c = 0; c < cols; c++) {
-        const t0 = Math.max(0.02, c / cols + offset);
-        const t1 = Math.min(0.98, (c + 0.92) / cols + offset);
+      for (let c = 0; c < 7; c++) {
+        const t0 = Math.max(0.02, c / 7 + offset);
+        const t1 = Math.min(0.98, (c + 0.92) / 7 + offset);
         if (t1 <= t0 + 0.03) continue;
         const x0 = bottomCorner.x + dx * t0;
         const yy0 = bottomCorner.y + dy * t0;
@@ -378,37 +378,38 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
     return bricks;
   }, [bottomCorner.x, bottomCorner.y, rightCorner.x, rightCorner.y]);
 
-  // Wooden fence posts around the diorama edges
   const fenceBackLeft = [0.14, 0.25, 0.36, 0.47, 0.58].map((t) => ({
     x: leftCorner.x - 16 + (topCorner.x - leftCorner.x) * t,
     y: leftCorner.y - 8 + (topCorner.y - leftCorner.y) * t,
   }));
-
   const fenceFrontLeft = [0.06, 0.16, 0.26].map((t) => ({
     x: leftCorner.x - 2 + (bottomCorner.x - leftCorner.x) * t,
     y: leftCorner.y + 18 + (bottomCorner.y - leftCorner.y) * t,
   }));
-
   const fenceFrontRight = [0.68, 0.78, 0.88].map((t) => ({
     x: bottomCorner.x + 2 + (rightCorner.x - bottomCorner.x) * t,
     y: bottomCorner.y + 18 + (rightCorner.y - bottomCorner.y) * t,
   }));
 
+  // === STRAIGHT/FLAT GEOMETRY ===
+  const flatW = FLAT_TILE * 8; // 496
+  const flatH = FLAT_TILE * 8; // 496
+
   const attackJumpInfo = useMemo(() => {
     if (!vfxEvent || (!vfxEvent.isCapture && !vfxEvent.isCheck)) return null;
-    const f = squareToIso(vfxEvent.from, flipped);
-    const t = squareToIso(vfxEvent.to, flipped);
+    const f = squareToBoardPoint(vfxEvent.from, flipped, boardView);
+    const t = squareToBoardPoint(vfxEvent.to, flipped, boardView);
     return {
       targetSq: vfxEvent.to,
       dx: f.x - t.x,
       dy: f.y - t.y,
       id: vfxEvent.id,
     };
-  }, [vfxEvent, flipped]);
+  }, [vfxEvent, flipped, boardView]);
 
   const surfaceArrows = useMemo(() => {
     if (!selectedSquare) return [];
-    const origin = squareToIso(selectedSquare, flipped);
+    const origin = squareToBoardPoint(selectedSquare, flipped, boardView);
     const arrows: Array<{ id: string; points: string; isCapture: boolean }> = [];
 
     const captures: Move[] = [];
@@ -419,47 +420,71 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
     }
 
     for (const m of captures) {
-      const target = squareToIso(m.to, flipped);
+      const target = squareToBoardPoint(m.to, flipped, boardView);
       const pts = buildSurfaceArrow(origin, target);
       if (pts) arrows.push({ id: `cap-${m.to}`, points: pts, isCapture: true });
     }
 
     for (const m of quiets.slice(0, 6)) {
-      const target = squareToIso(m.to, flipped);
+      const target = squareToBoardPoint(m.to, flipped, boardView);
       const pts = buildSurfaceArrow(origin, target);
       if (pts) arrows.push({ id: `q-${m.to}`, points: pts, isCapture: false });
     }
 
     return arrows;
-  }, [selectedSquare, legalMoves, flipped]);
+  }, [selectedSquare, legalMoves, flipped, boardView]);
 
-  // Bench coordinates outside the stone walls for captured enemy pieces!
-  // Left outer grass bench: Enemy Dogs captured by White (Player 1)
+  // Captured pieces sideline benches adapted to active boardView!
   const leftBenchCoords = useMemo(
     () =>
       capturedByWhite.slice(0, 12).map((pieceType, idx) => {
+        if (isFlat) {
+          const col = idx % 2;
+          const row = Math.floor(idx / 2);
+          return {
+            pieceType,
+            x: FLAT_ORIGIN_X - 58 - col * 48,
+            y: FLAT_ORIGIN_Y + 90 + row * 68,
+            key: `capw-${idx}-${pieceType}`,
+          };
+        }
         const row = Math.floor(idx / 6);
         const col = idx % 6;
         const t = 0.08 + col * 0.145;
-        const x = leftCorner.x - 42 - row * 38 + (bottomCorner.x - leftCorner.x) * t;
-        const y = leftCorner.y + 52 + row * 24 + (bottomCorner.y - leftCorner.y) * t;
-        return { pieceType, x, y, key: `capw-${idx}-${pieceType}` };
+        return {
+          pieceType,
+          x: leftCorner.x - 42 - row * 38 + (bottomCorner.x - leftCorner.x) * t,
+          y: leftCorner.y + 52 + row * 24 + (bottomCorner.y - leftCorner.y) * t,
+          key: `capw-${idx}-${pieceType}`,
+        };
       }),
-    [capturedByWhite, bottomCorner.x, bottomCorner.y, leftCorner.x, leftCorner.y]
+    [capturedByWhite, isFlat, bottomCorner.x, bottomCorner.y, leftCorner.x, leftCorner.y]
   );
 
-  // Right outer grass bench: Enemy Cats captured by Black (Player 2)
   const rightBenchCoords = useMemo(
     () =>
       capturedByBlack.slice(0, 12).map((pieceType, idx) => {
+        if (isFlat) {
+          const col = idx % 2;
+          const row = Math.floor(idx / 2);
+          return {
+            pieceType,
+            x: FLAT_ORIGIN_X + flatW + 58 + col * 48,
+            y: FLAT_ORIGIN_Y + 90 + row * 68,
+            key: `capb-${idx}-${pieceType}`,
+          };
+        }
         const row = Math.floor(idx / 6);
         const col = idx % 6;
         const t = 0.88 - col * 0.145;
-        const x = bottomCorner.x + 42 + row * 38 + (rightCorner.x - bottomCorner.x) * t;
-        const y = bottomCorner.y + 52 + row * 24 + (rightCorner.y - bottomCorner.y) * t;
-        return { pieceType, x, y, key: `capb-${idx}-${pieceType}` };
+        return {
+          pieceType,
+          x: bottomCorner.x + 42 + row * 38 + (rightCorner.x - bottomCorner.x) * t,
+          y: bottomCorner.y + 52 + row * 24 + (rightCorner.y - bottomCorner.y) * t,
+          key: `capb-${idx}-${pieceType}`,
+        };
       }),
-    [capturedByBlack, bottomCorner.x, bottomCorner.y, rightCorner.x, rightCorner.y]
+    [capturedByBlack, isFlat, flatW, bottomCorner.x, bottomCorner.y, rightCorner.x, rightCorner.y]
   );
 
   return (
@@ -500,9 +525,9 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
             <stop offset="100%" stopColor="#468F4A" />
           </linearGradient>
           <radialGradient id="board-sunlight" cx="28%" cy="22%" r="72%">
-            <stop offset="0%" stopColor="#FFF8C4" stopOpacity="0.24" />
-            <stop offset="65%" stopColor="#FFF8C4" stopOpacity="0.04" />
-            <stop offset="100%" stopColor="#122B18" stopOpacity="0.14" />
+            <stop offset="0%" stopColor="#FFF8C4" stopOpacity="0.22" />
+            <stop offset="65%" stopColor="#FFF8C4" stopOpacity="0.03" />
+            <stop offset="100%" stopColor="#122B18" stopOpacity="0.13" />
           </radialGradient>
           <linearGradient id="cliff-left" x1="0%" y1="0%" x2="0%" y2="100%">
             <stop offset="0%" stopColor="#8A7158" />
@@ -522,400 +547,714 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
           </linearGradient>
         </defs>
 
-        {/* 1. Deep Ground Drop Shadow beneath the raised 2.5D Garden Island Diorama */}
-        <polygon
-          points={`${topCorner.x},${topCorner.y + 42} ${rightCorner.x + 34},${rightCorner.y + 72} ${bottomCorner.x},${bottomCorner.y + 92} ${leftCorner.x - 34},${leftCorner.y + 72}`}
-          fill="rgba(6, 18, 11, 0.62)"
-          filter="url(#island-shadow-blur)"
-        />
-
-        {/* 2. Scattered Outer Garden Colorful Flowers */}
-        <g className="pointer-events-none">
-          <MiniFlower x={175} y={488} color="#FF8AB5" scale={1.1} />
-          <MiniFlower x={238} y={534} color="#74C4FF" scale={1.05} />
-          <MiniFlower x={312} y={576} color="#FFE97A" scale={1.1} />
-          <MiniFlower x={392} y={606} color="#D29BFF" scale={1} />
-          <MiniFlower x={742} y={570} color="#FF8AB5" scale={1.1} />
-          <MiniFlower x={818} y={530} color="#FFE97A" scale={1.05} />
-          <MiniFlower x={882} y={474} color="#74C4FF" scale={1.1} />
-          <MiniFlower x={115} y={248} color="#FFE97A" />
-          <MiniFlower x={922} y={240} color="#FF8AB5" />
-        </g>
-
-        {/* 3. Back Garden Scenery: Large Boulder, Lush Bushes & Back Wooden Fence */}
-        <g className="pointer-events-none">
-          <GardenBush
-            x={466}
-            y={72}
-            scale={1.05}
-            flowers={[
-              { dx: -12, dy: -4, color: '#FF8AB5' },
-              { dx: 12, dy: -8, color: '#FFE97A' },
-            ]}
-          />
-          <GardenBush
-            x={574}
-            y={74}
-            scale={0.92}
-            flowers={[{ dx: -6, dy: -2, color: '#74C4FF' }]}
-          />
-
-          {/* Large Corner Garden Boulder with crack & moss */}
-          <path
-            d="M318 164 C312 130, 342 104, 376 110 C404 102, 428 124, 422 154 L398 170 L336 174 Z"
-            fill="#9BA6AA"
-            stroke="#1E1C1A"
-            strokeWidth="2.8"
-            strokeLinejoin="round"
-          />
-          <path
-            d="M342 128 C354 118, 374 116, 390 122"
-            fill="none"
-            stroke="rgba(255,255,255,0.45)"
-            strokeWidth="3"
-            strokeLinecap="round"
-          />
-          <path
-            d="M366 135 L374 148 L368 160"
-            fill="none"
-            stroke="#566064"
-            strokeWidth="2.2"
-            strokeLinecap="round"
-          />
-          <path
-            d="M386 114 Q404 122 406 140 Q392 138 384 126 Z"
-            fill="#5BB047"
-            stroke="#1C331A"
-            strokeWidth="1.6"
-          />
-
-          {/* Back-Left Wooden Fence */}
-          <line
-            x1={fenceBackLeft[0].x}
-            y1={fenceBackLeft[0].y - 18}
-            x2={fenceBackLeft[fenceBackLeft.length - 1].x}
-            y2={fenceBackLeft[fenceBackLeft.length - 1].y - 18}
-            stroke="#8B562C"
-            strokeWidth="6.5"
-            strokeLinecap="round"
-          />
-          {fenceBackLeft.map((p, i) => (
-            <WoodPost key={`fbl-${i}`} x={p.x} y={p.y} h={38} />
-          ))}
-
-          {/* Thick Back Stone Wall Edges with cracks & moss */}
-          {backLeftStones.map((s, i) => (
-            <StoneBlock
-              key={`bls-${i}`}
-              x={s.x}
-              y={s.y}
-              rx={19}
-              ry={11}
-              shade={s.shade}
-              hasCrack={s.hasCrack}
-              hasMoss={s.hasMoss}
+        {/* ================================================================
+            BRANCH A: STRAIGHT / FLAT 2D GARDEN BOARD (EASY TACTICAL VIEW!)
+           ================================================================ */}
+        {isFlat ? (
+          <>
+            {/* Ground Drop Shadow beneath Flat Garden Island */}
+            <rect
+              x={FLAT_ORIGIN_X - 24}
+              y={FLAT_ORIGIN_Y + 26}
+              width={flatW + 48}
+              height={flatH + 54}
+              rx="28"
+              fill="rgba(6, 18, 11, 0.58)"
+              filter="url(#island-shadow-blur)"
             />
-          ))}
-          {backRightStones.map((s, i) => (
-            <StoneBlock
-              key={`brs-${i}`}
-              x={s.x}
-              y={s.y}
-              rx={19}
-              ry={11}
-              shade={s.shade}
-              hasCrack={s.hasCrack}
-              hasMoss={s.hasMoss}
-            />
-          ))}
 
-          {/* Left & Right Corner Lush Bushes with colorful blooms */}
-          <GardenBush
-            x={102}
-            y={324}
-            scale={1.06}
-            flowers={[
-              { dx: -14, dy: 2, color: '#FF8AB5' },
-              { dx: 8, dy: -8, color: '#FFE97A' },
-              { dx: 14, dy: 6, color: '#74C4FF' },
-            ]}
-          />
-          <GardenBush
-            x={938}
-            y={322}
-            scale={1.02}
-            flowers={[
-              { dx: -8, dy: -6, color: '#74C4FF' },
-              { dx: 10, dy: 4, color: '#FF8AB5' },
-            ]}
-          />
-        </g>
-
-        {/* 4. DEEP 2.5D ISLAND DIORAMA CLIFF & BRICKWORK SIDES (Front-Left & Front-Right) */}
-        <g className="pointer-events-none">
-          {/* Front-Left Earth Cliff Face */}
-          <polygon
-            points={`${leftCorner.x},${leftCorner.y} ${bottomCorner.x},${bottomCorner.y} ${bottomCorner.x},${bottomCorner.y + slabDepth} ${leftCorner.x},${leftCorner.y + slabDepth}`}
-            fill="url(#cliff-left)"
-            stroke="#1E1813"
-            strokeWidth="2.8"
-            strokeLinejoin="round"
-          />
-          {/* Front-Right Shaded Earth Cliff Face */}
-          <polygon
-            points={`${bottomCorner.x},${bottomCorner.y} ${rightCorner.x},${rightCorner.y} ${rightCorner.x},${rightCorner.y + slabDepth} ${bottomCorner.x},${bottomCorner.y + slabDepth}`}
-            fill="url(#cliff-right)"
-            stroke="#1E1813"
-            strokeWidth="2.8"
-            strokeLinejoin="round"
-          />
-
-          {/* 2.5D Retaining Brickwork along Left & Right Cliff Faces */}
-          {cliffBricksLeft.map((b, i) => (
-            <g key={`cbl-${i}`}>
-              <polygon points={b.pts} fill={b.fill} stroke="#2B221B" strokeWidth="1.8" strokeLinejoin="round" />
+            {/* 2.5D Retaining Stone & Brick Front Ledge beneath the Flat Board */}
+            <g className="pointer-events-none">
+              <rect
+                x={FLAT_ORIGIN_X - 18}
+                y={FLAT_ORIGIN_Y + flatH - 6}
+                width={flatW + 36}
+                height="48"
+                rx="16"
+                fill="url(#cliff-left)"
+                stroke="#1E1813"
+                strokeWidth="3"
+              />
+              {/* Brick pattern on bottom ledge */}
+              {Array.from({ length: 8 }, (_, i) => (
+                <rect
+                  key={`fbr-${i}`}
+                  x={FLAT_ORIGIN_X - 6 + i * 63}
+                  y={FLAT_ORIGIN_Y + flatH + 14}
+                  width="56"
+                  height="18"
+                  rx="4"
+                  fill={i % 2 === 0 ? '#A49889' : '#8D8173'}
+                  stroke="#2B221B"
+                  strokeWidth="1.8"
+                />
+              ))}
+              {/* Thick Garden Stone Border Frame */}
+              <rect
+                x={FLAT_ORIGIN_X - 18}
+                y={FLAT_ORIGIN_Y - 18}
+                width={flatW + 36}
+                height={flatH + 34}
+                rx="22"
+                fill="#8F9A9E"
+                stroke="#1C1917"
+                strokeWidth="3"
+              />
+              {/* Inner grass lip */}
+              <rect
+                x={FLAT_ORIGIN_X - 6}
+                y={FLAT_ORIGIN_Y - 6}
+                width={flatW + 12}
+                height={flatH + 12}
+                rx="10"
+                fill="#4D9643"
+                stroke="#1C331A"
+                strokeWidth="2.2"
+              />
+              {/* Corner Garden Bushes & Flowers framing the straight board */}
+              <GardenBush
+                x={FLAT_ORIGIN_X - 28}
+                y={FLAT_ORIGIN_Y - 8}
+                scale={0.82}
+                flowers={[{ dx: -8, dy: -4, color: '#FF8AB5' }]}
+              />
+              <GardenBush
+                x={FLAT_ORIGIN_X + flatW + 28}
+                y={FLAT_ORIGIN_Y - 8}
+                scale={0.82}
+                flowers={[{ dx: 8, dy: -4, color: '#74C4FF' }]}
+              />
+              <GardenBush
+                x={FLAT_ORIGIN_X - 28}
+                y={FLAT_ORIGIN_Y + flatH + 14}
+                scale={0.86}
+                flowers={[{ dx: -6, dy: -4, color: '#FFE97A' }]}
+              />
+              <GardenBush
+                x={FLAT_ORIGIN_X + flatW + 28}
+                y={FLAT_ORIGIN_Y + flatH + 14}
+                scale={0.86}
+                flowers={[{ dx: 8, dy: -2, color: '#FF8AB5' }]}
+              />
+              {/* Moss & Stone Blocks along top & bottom frame */}
+              {[0, 1, 2, 3, 4, 5, 6].map((i) => (
+                <StoneBlock
+                  key={`ft-s-${i}`}
+                  x={FLAT_ORIGIN_X + 34 + i * 71}
+                  y={FLAT_ORIGIN_Y - 16}
+                  rx={24}
+                  ry={9}
+                  shade={i % 2 === 0 ? '#AAB3B6' : '#929DA1'}
+                  hasCrack={i % 3 === 1}
+                  hasMoss={i % 3 === 0}
+                />
+              ))}
+              {[0, 1, 2, 3, 4, 5, 6].map((i) => (
+                <StoneBlock
+                  key={`fb-s-${i}`}
+                  x={FLAT_ORIGIN_X + 34 + i * 71}
+                  y={FLAT_ORIGIN_Y + flatH + 10}
+                  rx={24}
+                  ry={9}
+                  shade={i % 2 === 0 ? '#AAB3B6' : '#929DA1'}
+                  hasCrack={i % 3 === 2}
+                  hasMoss={i % 4 === 1}
+                />
+              ))}
             </g>
-          ))}
-          {cliffBricksRight.map((b, i) => (
+
+            {/* 8x8 Straight Grass Tiles */}
+            <g>
+              {Array.from({ length: 8 }, (_, vr) =>
+                Array.from({ length: 8 }, (_, vc) => {
+                  const boardRow = flipped ? 7 - vr : vr;
+                  const boardCol = flipped ? 7 - vc : vc;
+                  const sq = `${FILES[boardCol]}${RANKS[boardRow]}` as Square;
+                  const isLight = (boardRow + boardCol) % 2 === 0;
+                  const x = FLAT_ORIGIN_X + vc * FLAT_TILE;
+                  const y = FLAT_ORIGIN_Y + vr * FLAT_TILE;
+                  const center = flatGridCenter(vr, vc);
+
+                  const isSelected = selectedSquare === sq;
+                  const legalInfo = legalTargetMap.get(sq);
+                  const isCheckedKing = checkedKingSquare === sq;
+                  const isLastFrom = lastMove?.from === sq;
+                  const isLastTo = lastMove?.to === sq;
+                  const isHintSquare = hintMove?.from === sq || hintMove?.to === sq;
+
+                  return (
+                    <g
+                      key={sq}
+                      data-square={sq}
+                      onClick={() => !disabled && onSquareClick(sq)}
+                      className={disabled ? 'cursor-default' : 'cursor-pointer'}
+                    >
+                      <rect
+                        x={x}
+                        y={y}
+                        width={FLAT_TILE}
+                        height={FLAT_TILE}
+                        fill={isLight ? 'url(#tile-light)' : 'url(#tile-dark)'}
+                        stroke="#3B7A3E"
+                        strokeWidth="1"
+                      />
+
+                      {/* Subtle Grass Blade Texture */}
+                      {(vr + vc) % 2 === 0 && (
+                        <path
+                          d={`M${x + 12} ${y + 46} L${x + 10} ${y + 40} M${x + 16} ${y + 47} L${x + 17} ${y + 41} M${x + 46} ${y + 18} L${x + 48} ${y + 13}`}
+                          stroke={isLight ? '#6EB83E' : '#3A7B3D'}
+                          strokeWidth="1.35"
+                          strokeLinecap="round"
+                          opacity="0.58"
+                          className="pointer-events-none"
+                        />
+                      )}
+
+                      {/* Last Move Highlight */}
+                      {(isLastFrom || isLastTo) && !isSelected && !legalInfo && (
+                        <rect
+                          x={x + 1}
+                          y={y + 1}
+                          width={FLAT_TILE - 2}
+                          height={FLAT_TILE - 2}
+                          fill="rgba(255, 241, 130, 0.34)"
+                          stroke="rgba(255, 232, 95, 0.78)"
+                          strokeWidth="1.8"
+                          className="pointer-events-none"
+                        />
+                      )}
+
+                      {/* Skill Hint Highlight */}
+                      {isHintSquare && !isSelected && (
+                        <rect
+                          x={x + 2}
+                          y={y + 2}
+                          width={FLAT_TILE - 4}
+                          height={FLAT_TILE - 4}
+                          rx="6"
+                          fill="rgba(116, 242, 255, 0.44)"
+                          stroke="#38E8FF"
+                          strokeWidth="2.8"
+                          filter="url(#glow-blue)"
+                          className="pointer-events-none animate-tile-glow"
+                        />
+                      )}
+
+                      {/* Selected Tile: Glowing Neon Yellow */}
+                      {isSelected && (
+                        <rect
+                          x={x + 2}
+                          y={y + 2}
+                          width={FLAT_TILE - 4}
+                          height={FLAT_TILE - 4}
+                          rx="6"
+                          fill="url(#yellow-neon)"
+                          fillOpacity="0.82"
+                          stroke="#FFFCE0"
+                          strokeWidth="3"
+                          filter="url(#glow-yellow)"
+                          className="pointer-events-none"
+                        />
+                      )}
+
+                      {/* Legal Quiet Move: Soft Yellow Glow + Center Dot */}
+                      {legalInfo && !legalInfo.isCapture && (
+                        <g className="pointer-events-none animate-tile-glow">
+                          <rect
+                            x={x + 2}
+                            y={y + 2}
+                            width={FLAT_TILE - 4}
+                            height={FLAT_TILE - 4}
+                            rx="6"
+                            fill="url(#yellow-neon)"
+                            fillOpacity="0.55"
+                            stroke="#FFF48C"
+                            strokeWidth="2.2"
+                            filter="url(#glow-yellow)"
+                          />
+                          <circle
+                            cx={center.x}
+                            cy={center.y}
+                            r="9.5"
+                            fill="#FFFCE6"
+                            stroke="#D99B00"
+                            strokeWidth="2"
+                          />
+                        </g>
+                      )}
+
+                      {/* Legal Capture Target: Glowing Neon Blue */}
+                      {legalInfo && legalInfo.isCapture && (
+                        <g className="pointer-events-none animate-tile-glow">
+                          <rect
+                            x={x + 2}
+                            y={y + 2}
+                            width={FLAT_TILE - 4}
+                            height={FLAT_TILE - 4}
+                            rx="6"
+                            fill="url(#blue-neon)"
+                            fillOpacity="0.7"
+                            stroke="#DDFBFF"
+                            strokeWidth="3"
+                            filter="url(#glow-blue)"
+                          />
+                          <circle
+                            cx={center.x}
+                            cy={center.y}
+                            r="22"
+                            fill="none"
+                            stroke="#FFFFFF"
+                            strokeWidth="2.4"
+                            strokeDasharray="6 4"
+                          />
+                        </g>
+                      )}
+
+                      {/* Checked King Alert */}
+                      {isCheckedKing && (
+                        <rect
+                          x={x + 2}
+                          y={y + 2}
+                          width={FLAT_TILE - 4}
+                          height={FLAT_TILE - 4}
+                          rx="6"
+                          fill="rgba(239, 68, 68, 0.72)"
+                          stroke="#FFE066"
+                          strokeWidth="3"
+                          className="pointer-events-none animate-tile-glow"
+                        />
+                      )}
+
+                      {/* Rank & File Coordinates */}
+                      {vc === 0 && (
+                        <text
+                          x={x + 5}
+                          y={y + 14}
+                          fontSize="11"
+                          fontFamily="'Archivo Black', sans-serif"
+                          fill="#FFFCE6"
+                          stroke="#213825"
+                          strokeWidth="2.2"
+                          paintOrder="stroke"
+                          className="pointer-events-none"
+                        >
+                          {RANKS[boardRow]}
+                        </text>
+                      )}
+                      {vr === 7 && (
+                        <text
+                          x={x + FLAT_TILE - 12}
+                          y={y + FLAT_TILE - 5}
+                          fontSize="11"
+                          fontFamily="'Archivo Black', sans-serif"
+                          fill="#FFFCE6"
+                          stroke="#213825"
+                          strokeWidth="2.2"
+                          paintOrder="stroke"
+                          className="pointer-events-none"
+                        >
+                          {FILES[boardCol]}
+                        </text>
+                      )}
+                    </g>
+                  );
+                })
+              )}
+              <rect
+                x={FLAT_ORIGIN_X}
+                y={FLAT_ORIGIN_Y}
+                width={flatW}
+                height={flatH}
+                fill="url(#board-sunlight)"
+                className="pointer-events-none"
+              />
+            </g>
+          </>
+        ) : (
+          /* ================================================================
+             BRANCH B: 2.5D ISOMETRIC GARDEN ISLAND DIORAMA
+             ================================================================ */
+          <>
+            {/* 1. Deep Ground Drop Shadow */}
             <polygon
-              key={`cbr-${i}`}
-              points={b.pts}
-              fill={b.fill}
-              stroke="#241C16"
-              strokeWidth="1.8"
-              strokeLinejoin="round"
+              points={`${topCorner.x},${topCorner.y + 42} ${rightCorner.x + 34},${rightCorner.y + 72} ${bottomCorner.x},${bottomCorner.y + 92} ${leftCorner.x - 34},${leftCorner.y + 72}`}
+              fill="rgba(6, 18, 11, 0.62)"
+              filter="url(#island-shadow-blur)"
             />
-          ))}
 
-          {/* Overhanging Green Grass Lip draping over the top of both cliff faces */}
-          <polygon
-            points={`${leftCorner.x},${leftCorner.y} ${bottomCorner.x},${bottomCorner.y} ${bottomCorner.x},${bottomCorner.y + 15} ${leftCorner.x},${leftCorner.y + 15}`}
-            fill="#5EAE46"
-            stroke="#1C331A"
-            strokeWidth="2"
-          />
-          <polygon
-            points={`${bottomCorner.x},${bottomCorner.y} ${rightCorner.x},${rightCorner.y} ${rightCorner.x},${rightCorner.y + 15} ${bottomCorner.x},${bottomCorner.y + 15}`}
-            fill="#478C38"
-            stroke="#1C331A"
-            strokeWidth="2"
-          />
+            {/* 2. Scattered Outer Garden Flowers */}
+            <g className="pointer-events-none">
+              <MiniFlower x={175} y={488} color="#FF8AB5" scale={1.1} />
+              <MiniFlower x={238} y={534} color="#74C4FF" scale={1.05} />
+              <MiniFlower x={312} y={576} color="#FFE97A" scale={1.1} />
+              <MiniFlower x={392} y={606} color="#D29BFF" scale={1} />
+              <MiniFlower x={742} y={570} color="#FF8AB5" scale={1.1} />
+              <MiniFlower x={818} y={530} color="#FFE97A" scale={1.05} />
+              <MiniFlower x={882} y={474} color="#74C4FF" scale={1.1} />
+              <MiniFlower x={115} y={248} color="#FFE97A" />
+              <MiniFlower x={922} y={240} color="#FF8AB5" />
+            </g>
 
-          {/* Hanging Moss Tufts on the Island Cliff */}
-          <path
-            d={`M${leftCorner.x + 95} ${leftCorner.y + 52} Q${leftCorner.x + 112} ${leftCorner.y + 76} ${leftCorner.x + 128} ${leftCorner.y + 68} Z`}
-            fill="#56A844"
-            stroke="#1B3019"
-            strokeWidth="1.6"
-          />
-          <path
-            d={`M${leftCorner.x + 255} ${leftCorner.y + 135} Q${leftCorner.x + 272} ${leftCorner.y + 162} ${leftCorner.x + 292} ${leftCorner.y + 152} Z`}
-            fill="#56A844"
-            stroke="#1B3019"
-            strokeWidth="1.6"
-          />
-          <path
-            d={`M${bottomCorner.x + 145} ${bottomCorner.y - 60} Q${bottomCorner.x + 162} ${bottomCorner.y - 34} ${bottomCorner.x + 178} ${bottomCorner.y - 76} Z`}
-            fill="#438736"
-            stroke="#1B3019"
-            strokeWidth="1.6"
-          />
-        </g>
+            {/* 3. Back Garden Scenery: Boulder, Bushes, Wooden Fence, Back Stone Walls */}
+            <g className="pointer-events-none">
+              <GardenBush
+                x={466}
+                y={72}
+                scale={1.05}
+                flowers={[
+                  { dx: -12, dy: -4, color: '#FF8AB5' },
+                  { dx: 12, dy: -8, color: '#FFE97A' },
+                ]}
+              />
+              <GardenBush
+                x={574}
+                y={74}
+                scale={0.92}
+                flowers={[{ dx: -6, dy: -2, color: '#74C4FF' }]}
+              />
 
-        {/* 5. 8x8 ISOMETRIC GRASS CHESSBOARD TILES WITH FINE GRASS BLADES & WARM LIGHTING */}
-        <g>
-          {Array.from({ length: 8 }, (_, vr) =>
-            Array.from({ length: 8 }, (_, vc) => {
-              const boardRow = flipped ? 7 - vr : vr;
-              const boardCol = flipped ? 7 - vc : vc;
-              const sq = `${FILES[boardCol]}${RANKS[boardRow]}` as Square;
-              const isLight = (boardRow + boardCol) % 2 === 0;
-              const points = isoTilePoints(vr, vc);
-              const center = isoGridCenter(vr, vc);
+              <path
+                d="M318 164 C312 130, 342 104, 376 110 C404 102, 428 124, 422 154 L398 170 L336 174 Z"
+                fill="#9BA6AA"
+                stroke="#1E1C1A"
+                strokeWidth="2.8"
+                strokeLinejoin="round"
+              />
+              <path
+                d="M342 128 C354 118, 374 116, 390 122"
+                fill="none"
+                stroke="rgba(255,255,255,0.45)"
+                strokeWidth="3"
+                strokeLinecap="round"
+              />
+              <path
+                d="M366 135 L374 148 L368 160"
+                fill="none"
+                stroke="#566064"
+                strokeWidth="2.2"
+                strokeLinecap="round"
+              />
+              <path
+                d="M386 114 Q404 122 406 140 Q392 138 384 126 Z"
+                fill="#5BB047"
+                stroke="#1C331A"
+                strokeWidth="1.6"
+              />
 
-              const isSelected = selectedSquare === sq;
-              const legalInfo = legalTargetMap.get(sq);
-              const isCheckedKing = checkedKingSquare === sq;
-              const isLastFrom = lastMove?.from === sq;
-              const isLastTo = lastMove?.to === sq;
-              const isHintSquare = hintMove?.from === sq || hintMove?.to === sq;
+              <line
+                x1={fenceBackLeft[0].x}
+                y1={fenceBackLeft[0].y - 18}
+                x2={fenceBackLeft[fenceBackLeft.length - 1].x}
+                y2={fenceBackLeft[fenceBackLeft.length - 1].y - 18}
+                stroke="#8B562C"
+                strokeWidth="6.5"
+                strokeLinecap="round"
+              />
+              {fenceBackLeft.map((p, i) => (
+                <WoodPost key={`fbl-${i}`} x={p.x} y={p.y} h={38} />
+              ))}
 
-              return (
-                <g
-                  key={sq}
-                  data-square={sq}
-                  onClick={() => !disabled && onSquareClick(sq)}
-                  className={disabled ? 'cursor-default' : 'cursor-pointer'}
-                >
-                  {/* Base Grass Diamond Tile */}
-                  <polygon
-                    points={points}
-                    fill={isLight ? 'url(#tile-light)' : 'url(#tile-dark)'}
-                    stroke="#3B7A3E"
-                    strokeWidth="1.2"
-                  />
+              {backLeftStones.map((s, i) => (
+                <StoneBlock
+                  key={`bls-${i}`}
+                  x={s.x}
+                  y={s.y}
+                  rx={19}
+                  ry={11}
+                  shade={s.shade}
+                  hasCrack={s.hasCrack}
+                  hasMoss={s.hasMoss}
+                />
+              ))}
+              {backRightStones.map((s, i) => (
+                <StoneBlock
+                  key={`brs-${i}`}
+                  x={s.x}
+                  y={s.y}
+                  rx={19}
+                  ry={11}
+                  shade={s.shade}
+                  hasCrack={s.hasCrack}
+                  hasMoss={s.hasMoss}
+                />
+              ))}
 
-                  {/* Fine Grass Blades & Tiny Clover Texture on Tiles */}
-                  {(vr + vc) % 2 === 0 && (
-                    <path
-                      d={`M${center.x - 14} ${center.y + 3} L${center.x - 16} ${center.y - 2} M${center.x - 11} ${center.y + 4} L${center.x - 10} ${center.y - 1} M${center.x + 11} ${center.y - 2} L${center.x + 13} ${center.y - 7} M${center.x + 14} ${center.y - 1} L${center.x + 17} ${center.y - 5}`}
-                      stroke={isLight ? '#6EB83E' : '#3A7B3D'}
-                      strokeWidth="1.35"
-                      strokeLinecap="round"
-                      opacity="0.62"
-                      className="pointer-events-none"
-                    />
-                  )}
-                  {(vr * 3 + vc) % 5 === 0 && (
-                    <circle
-                      cx={center.x + 4}
-                      cy={center.y + 7}
-                      r="1.6"
-                      fill={isLight ? '#FFF59D' : '#A5E887'}
-                      opacity="0.65"
-                      className="pointer-events-none"
-                    />
-                  )}
+              <GardenBush
+                x={102}
+                y={324}
+                scale={1.06}
+                flowers={[
+                  { dx: -14, dy: 2, color: '#FF8AB5' },
+                  { dx: 8, dy: -8, color: '#FFE97A' },
+                  { dx: 14, dy: 6, color: '#74C4FF' },
+                ]}
+              />
+              <GardenBush
+                x={938}
+                y={322}
+                scale={1.02}
+                flowers={[
+                  { dx: -8, dy: -6, color: '#74C4FF' },
+                  { dx: 10, dy: 4, color: '#FF8AB5' },
+                ]}
+              />
+            </g>
 
-                  {/* Last Move Warm Sunbeam Highlight */}
-                  {(isLastFrom || isLastTo) && !isSelected && !legalInfo && (
-                    <polygon
-                      points={points}
-                      fill="rgba(255, 241, 130, 0.34)"
-                      stroke="rgba(255, 232, 95, 0.78)"
-                      strokeWidth="1.7"
-                      className="pointer-events-none"
-                    />
-                  )}
+            {/* 4. Deep 2.5D Island Cliff & Brickwork */}
+            <g className="pointer-events-none">
+              <polygon
+                points={`${leftCorner.x},${leftCorner.y} ${bottomCorner.x},${bottomCorner.y} ${bottomCorner.x},${bottomCorner.y + slabDepth} ${leftCorner.x},${leftCorner.y + slabDepth}`}
+                fill="url(#cliff-left)"
+                stroke="#1E1813"
+                strokeWidth="2.8"
+                strokeLinejoin="round"
+              />
+              <polygon
+                points={`${bottomCorner.x},${bottomCorner.y} ${rightCorner.x},${rightCorner.y} ${rightCorner.x},${rightCorner.y + slabDepth} ${bottomCorner.x},${bottomCorner.y + slabDepth}`}
+                fill="url(#cliff-right)"
+                stroke="#1E1813"
+                strokeWidth="2.8"
+                strokeLinejoin="round"
+              />
+              {cliffBricksLeft.map((b, i) => (
+                <polygon
+                  key={`cbl-${i}`}
+                  points={b.pts}
+                  fill={b.fill}
+                  stroke="#2B221B"
+                  strokeWidth="1.8"
+                  strokeLinejoin="round"
+                />
+              ))}
+              {cliffBricksRight.map((b, i) => (
+                <polygon
+                  key={`cbr-${i}`}
+                  points={b.pts}
+                  fill={b.fill}
+                  stroke="#241C16"
+                  strokeWidth="1.8"
+                  strokeLinejoin="round"
+                />
+              ))}
+              <polygon
+                points={`${leftCorner.x},${leftCorner.y} ${bottomCorner.x},${bottomCorner.y} ${bottomCorner.x},${bottomCorner.y + 15} ${leftCorner.x},${leftCorner.y + 15}`}
+                fill="#5EAE46"
+                stroke="#1C331A"
+                strokeWidth="2"
+              />
+              <polygon
+                points={`${bottomCorner.x},${bottomCorner.y} ${rightCorner.x},${rightCorner.y} ${rightCorner.x},${rightCorner.y + 15} ${bottomCorner.x},${bottomCorner.y + 15}`}
+                fill="#478C38"
+                stroke="#1C331A"
+                strokeWidth="2"
+              />
+              <path
+                d={`M${leftCorner.x + 95} ${leftCorner.y + 52} Q${leftCorner.x + 112} ${leftCorner.y + 76} ${leftCorner.x + 128} ${leftCorner.y + 68} Z`}
+                fill="#56A844"
+                stroke="#1B3019"
+                strokeWidth="1.6"
+              />
+              <path
+                d={`M${leftCorner.x + 255} ${leftCorner.y + 135} Q${leftCorner.x + 272} ${leftCorner.y + 162} ${leftCorner.x + 292} ${leftCorner.y + 152} Z`}
+                fill="#56A844"
+                stroke="#1B3019"
+                strokeWidth="1.6"
+              />
+              <path
+                d={`M${bottomCorner.x + 145} ${bottomCorner.y - 60} Q${bottomCorner.x + 162} ${bottomCorner.y - 34} ${bottomCorner.x + 178} ${bottomCorner.y - 76} Z`}
+                fill="#438736"
+                stroke="#1B3019"
+                strokeWidth="1.6"
+              />
+            </g>
 
-                  {/* Skill Hint Highlight */}
-                  {isHintSquare && !isSelected && (
-                    <polygon
-                      points={points}
-                      fill="rgba(116, 242, 255, 0.44)"
-                      stroke="#38E8FF"
-                      strokeWidth="2.5"
-                      filter="url(#glow-blue)"
-                      className="pointer-events-none animate-tile-glow"
-                    />
-                  )}
+            {/* 5. 8x8 Isometric Grass Tiles */}
+            <g>
+              {Array.from({ length: 8 }, (_, vr) =>
+                Array.from({ length: 8 }, (_, vc) => {
+                  const boardRow = flipped ? 7 - vr : vr;
+                  const boardCol = flipped ? 7 - vc : vc;
+                  const sq = `${FILES[boardCol]}${RANKS[boardRow]}` as Square;
+                  const isLight = (boardRow + boardCol) % 2 === 0;
+                  const points = isoTilePoints(vr, vc);
+                  const center = isoGridCenter(vr, vc);
 
-                  {/* Selected Piece Tile: Glowing Neon Yellow */}
-                  {isSelected && (
-                    <polygon
-                      points={points}
-                      fill="url(#yellow-neon)"
-                      fillOpacity="0.82"
-                      stroke="#FFFCE0"
-                      strokeWidth="3"
-                      filter="url(#glow-yellow)"
-                      className="pointer-events-none"
-                    />
-                  )}
+                  const isSelected = selectedSquare === sq;
+                  const legalInfo = legalTargetMap.get(sq);
+                  const isCheckedKing = checkedKingSquare === sq;
+                  const isLastFrom = lastMove?.from === sq;
+                  const isLastTo = lastMove?.to === sq;
+                  const isHintSquare = hintMove?.from === sq || hintMove?.to === sq;
 
-                  {/* Legal Quiet Move Tile: Soft Glowing Neon Yellow */}
-                  {legalInfo && !legalInfo.isCapture && (
-                    <g className="pointer-events-none animate-tile-glow">
+                  return (
+                    <g
+                      key={sq}
+                      data-square={sq}
+                      onClick={() => !disabled && onSquareClick(sq)}
+                      className={disabled ? 'cursor-default' : 'cursor-pointer'}
+                    >
                       <polygon
                         points={points}
-                        fill="url(#yellow-neon)"
-                        fillOpacity="0.58"
-                        stroke="#FFF48C"
-                        strokeWidth="2.4"
-                        filter="url(#glow-yellow)"
+                        fill={isLight ? 'url(#tile-light)' : 'url(#tile-dark)'}
+                        stroke="#3B7A3E"
+                        strokeWidth="1.2"
                       />
-                      <ellipse
-                        cx={center.x}
-                        cy={center.y}
-                        rx="11"
-                        ry="6"
-                        fill="#FFFCE6"
-                        stroke="#D99B00"
-                        strokeWidth="1.8"
-                      />
+
+                      {(vr + vc) % 2 === 0 && (
+                        <path
+                          d={`M${center.x - 14} ${center.y + 3} L${center.x - 16} ${center.y - 2} M${center.x - 11} ${center.y + 4} L${center.x - 10} ${center.y - 1} M${center.x + 11} ${center.y - 2} L${center.x + 13} ${center.y - 7} M${center.x + 14} ${center.y - 1} L${center.x + 17} ${center.y - 5}`}
+                          stroke={isLight ? '#6EB83E' : '#3A7B3D'}
+                          strokeWidth="1.35"
+                          strokeLinecap="round"
+                          opacity="0.62"
+                          className="pointer-events-none"
+                        />
+                      )}
+                      {(vr * 3 + vc) % 5 === 0 && (
+                        <circle
+                          cx={center.x + 4}
+                          cy={center.y + 7}
+                          r="1.6"
+                          fill={isLight ? '#FFF59D' : '#A5E887'}
+                          opacity="0.65"
+                          className="pointer-events-none"
+                        />
+                      )}
+
+                      {(isLastFrom || isLastTo) && !isSelected && !legalInfo && (
+                        <polygon
+                          points={points}
+                          fill="rgba(255, 241, 130, 0.34)"
+                          stroke="rgba(255, 232, 95, 0.78)"
+                          strokeWidth="1.7"
+                          className="pointer-events-none"
+                        />
+                      )}
+
+                      {isHintSquare && !isSelected && (
+                        <polygon
+                          points={points}
+                          fill="rgba(116, 242, 255, 0.44)"
+                          stroke="#38E8FF"
+                          strokeWidth="2.5"
+                          filter="url(#glow-blue)"
+                          className="pointer-events-none animate-tile-glow"
+                        />
+                      )}
+
+                      {isSelected && (
+                        <polygon
+                          points={points}
+                          fill="url(#yellow-neon)"
+                          fillOpacity="0.82"
+                          stroke="#FFFCE0"
+                          strokeWidth="3"
+                          filter="url(#glow-yellow)"
+                          className="pointer-events-none"
+                        />
+                      )}
+
+                      {legalInfo && !legalInfo.isCapture && (
+                        <g className="pointer-events-none animate-tile-glow">
+                          <polygon
+                            points={points}
+                            fill="url(#yellow-neon)"
+                            fillOpacity="0.58"
+                            stroke="#FFF48C"
+                            strokeWidth="2.4"
+                            filter="url(#glow-yellow)"
+                          />
+                          <ellipse
+                            cx={center.x}
+                            cy={center.y}
+                            rx="11"
+                            ry="6"
+                            fill="#FFFCE6"
+                            stroke="#D99B00"
+                            strokeWidth="1.8"
+                          />
+                        </g>
+                      )}
+
+                      {legalInfo && legalInfo.isCapture && (
+                        <g className="pointer-events-none animate-tile-glow">
+                          <polygon
+                            points={points}
+                            fill="url(#blue-neon)"
+                            fillOpacity="0.72"
+                            stroke="#DDFBFF"
+                            strokeWidth="3"
+                            filter="url(#glow-blue)"
+                          />
+                          <ellipse
+                            cx={center.x}
+                            cy={center.y}
+                            rx="22"
+                            ry="11.5"
+                            fill="none"
+                            stroke="#FFFFFF"
+                            strokeWidth="2.4"
+                            strokeDasharray="6 4"
+                          />
+                        </g>
+                      )}
+
+                      {isCheckedKing && (
+                        <polygon
+                          points={points}
+                          fill="rgba(239, 68, 68, 0.72)"
+                          stroke="#FFE066"
+                          strokeWidth="3"
+                          className="pointer-events-none animate-tile-glow"
+                        />
+                      )}
+
+                      {vr === 7 && (
+                        <text
+                          x={center.x - 16}
+                          y={center.y + 15}
+                          fontSize="11"
+                          fontFamily="'Archivo Black', sans-serif"
+                          fill="rgba(255, 250, 230, 0.88)"
+                          stroke="#213825"
+                          strokeWidth="2.4"
+                          paintOrder="stroke"
+                          className="pointer-events-none"
+                        >
+                          {FILES[boardCol]}
+                        </text>
+                      )}
+                      {vc === 7 && (
+                        <text
+                          x={center.x + 12}
+                          y={center.y + 15}
+                          fontSize="11"
+                          fontFamily="'Archivo Black', sans-serif"
+                          fill="rgba(255, 250, 230, 0.88)"
+                          stroke="#213825"
+                          strokeWidth="2.4"
+                          paintOrder="stroke"
+                          className="pointer-events-none"
+                        >
+                          {RANKS[boardRow]}
+                        </text>
+                      )}
                     </g>
-                  )}
+                  );
+                })
+              )}
 
-                  {/* Legal Capture Target Tile: Glowing Neon Blue */}
-                  {legalInfo && legalInfo.isCapture && (
-                    <g className="pointer-events-none animate-tile-glow">
-                      <polygon
-                        points={points}
-                        fill="url(#blue-neon)"
-                        fillOpacity="0.72"
-                        stroke="#DDFBFF"
-                        strokeWidth="3"
-                        filter="url(#glow-blue)"
-                      />
-                      <ellipse
-                        cx={center.x}
-                        cy={center.y}
-                        rx="22"
-                        ry="11.5"
-                        fill="none"
-                        stroke="#FFFFFF"
-                        strokeWidth="2.4"
-                        strokeDasharray="6 4"
-                      />
-                    </g>
-                  )}
+              <polygon
+                points={`${topCorner.x},${topCorner.y} ${rightCorner.x},${rightCorner.y} ${bottomCorner.x},${bottomCorner.y} ${leftCorner.x},${leftCorner.y}`}
+                fill="url(#board-sunlight)"
+                className="pointer-events-none"
+              />
+            </g>
+          </>
+        )}
 
-                  {/* Checked King Tile */}
-                  {isCheckedKing && (
-                    <polygon
-                      points={points}
-                      fill="rgba(239, 68, 68, 0.72)"
-                      stroke="#FFE066"
-                      strokeWidth="3"
-                      className="pointer-events-none animate-tile-glow"
-                    />
-                  )}
-
-                  {/* Edge Coordinate Labels */}
-                  {vr === 7 && (
-                    <text
-                      x={center.x - 16}
-                      y={center.y + 15}
-                      fontSize="11"
-                      fontFamily="'Archivo Black', sans-serif"
-                      fill="rgba(255, 250, 230, 0.88)"
-                      stroke="#213825"
-                      strokeWidth="2.4"
-                      paintOrder="stroke"
-                      className="pointer-events-none"
-                    >
-                      {FILES[boardCol]}
-                    </text>
-                  )}
-                  {vc === 7 && (
-                    <text
-                      x={center.x + 12}
-                      y={center.y + 15}
-                      fontSize="11"
-                      fontFamily="'Archivo Black', sans-serif"
-                      fill="rgba(255, 250, 230, 0.88)"
-                      stroke="#213825"
-                      strokeWidth="2.4"
-                      paintOrder="stroke"
-                      className="pointer-events-none"
-                    >
-                      {RANKS[boardRow]}
-                    </text>
-                  )}
-                </g>
-              );
-            })
-          )}
-
-          {/* Soft Warm Directional Sunlight Overlay across the entire grass board */}
-          <polygon
-            points={`${topCorner.x},${topCorner.y} ${rightCorner.x},${rightCorner.y} ${bottomCorner.x},${bottomCorner.y} ${leftCorner.x},${leftCorner.y}`}
-            fill="url(#board-sunlight)"
-            className="pointer-events-none"
-          />
-        </g>
-
-        {/* 6. Glowing Surface Direction Arrows */}
+        {/* 6. Glowing Surface Direction Arrows (Works identically in Iso & Flat!) */}
         {surfaceArrows.length > 0 && (
           <g className="pointer-events-none">
             {surfaceArrows.map((arr) => (
@@ -932,19 +1271,17 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
           </g>
         )}
 
-        {/* 7. 2D FULL-BODY CHIBI STANDING SPRITES WITH LIVING IDLE BREATHING ANIMATION */}
+        {/* 7. 2D FULL-BODY CHIBI STANDING SPRITES WITH LIVING IDLE BREATHING */}
         <g className="pointer-events-none">
           {sortedPieces.map((p) => {
             const isSelected = selectedSquare === p.sq;
             const isLastTo = lastMove?.to === p.sq;
             const isJumpingAttacker = attackJumpInfo?.targetSq === p.sq;
-            const spriteW = 76;
-            const spriteH = 88;
+            const spriteW = isFlat ? 66 : 76;
+            const spriteH = isFlat ? 76 : 88;
 
             const drawX = p.x - spriteW / 2;
-            const drawY = p.y - spriteH + 13;
-
-            // Deterministic staggered breathing delay so characters feel naturally alive
+            const drawY = isFlat ? p.y - spriteH + 22 : p.y - spriteH + 13;
             const idleDelay = `${(((p.vr * 7 + p.vc * 3) % 9) * 0.24).toFixed(2)}s`;
 
             const animClass = isJumpingAttacker
@@ -987,81 +1324,79 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
           })}
         </g>
 
-        {/* 8. Foreground Thick Stone Wall (Cracks + Moss), Mini Fences, Bushes & Flowers */}
-        <g className="pointer-events-none">
-          {frontLeftStones.map((s, i) => (
-            <StoneBlock
-              key={`fls-${i}`}
-              x={s.x}
-              y={s.y}
-              rx={19}
-              ry={11}
-              shade={s.shade}
-              hasCrack={s.hasCrack}
-              hasMoss={s.hasMoss}
+        {/* 8. Isometric Foreground Stone Walls, Mini Fences & Bushes (Iso Mode Only) */}
+        {!isFlat && (
+          <g className="pointer-events-none">
+            {frontLeftStones.map((s, i) => (
+              <StoneBlock
+                key={`fls-${i}`}
+                x={s.x}
+                y={s.y}
+                rx={19}
+                ry={11}
+                shade={s.shade}
+                hasCrack={s.hasCrack}
+                hasMoss={s.hasMoss}
+              />
+            ))}
+            {frontRightStones.map((s, i) => (
+              <StoneBlock
+                key={`frs-${i}`}
+                x={s.x}
+                y={s.y}
+                rx={19}
+                ry={11}
+                shade={s.shade}
+                hasCrack={s.hasCrack}
+                hasMoss={s.hasMoss}
+              />
+            ))}
+
+            <line
+              x1={fenceFrontLeft[0].x}
+              y1={fenceFrontLeft[0].y - 16}
+              x2={fenceFrontLeft[fenceFrontLeft.length - 1].x}
+              y2={fenceFrontLeft[fenceFrontLeft.length - 1].y - 16}
+              stroke="#8B562C"
+              strokeWidth="6"
+              strokeLinecap="round"
             />
-          ))}
-          {frontRightStones.map((s, i) => (
-            <StoneBlock
-              key={`frs-${i}`}
-              x={s.x}
-              y={s.y}
-              rx={19}
-              ry={11}
-              shade={s.shade}
-              hasCrack={s.hasCrack}
-              hasMoss={s.hasMoss}
+            {fenceFrontLeft.map((p, i) => (
+              <WoodPost key={`ffl-${i}`} x={p.x} y={p.y} h={32} />
+            ))}
+
+            <line
+              x1={fenceFrontRight[0].x}
+              y1={fenceFrontRight[0].y - 16}
+              x2={fenceFrontRight[fenceFrontRight.length - 1].x}
+              y2={fenceFrontRight[fenceFrontRight.length - 1].y - 16}
+              stroke="#8B562C"
+              strokeWidth="6"
+              strokeLinecap="round"
             />
-          ))}
+            {fenceFrontRight.map((p, i) => (
+              <WoodPost key={`ffr-${i}`} x={p.x} y={p.y} h={32} />
+            ))}
 
-          {/* Front-Left Wooden Fence */}
-          <line
-            x1={fenceFrontLeft[0].x}
-            y1={fenceFrontLeft[0].y - 16}
-            x2={fenceFrontLeft[fenceFrontLeft.length - 1].x}
-            y2={fenceFrontLeft[fenceFrontLeft.length - 1].y - 16}
-            stroke="#8B562C"
-            strokeWidth="6"
-            strokeLinecap="round"
-          />
-          {fenceFrontLeft.map((p, i) => (
-            <WoodPost key={`ffl-${i}`} x={p.x} y={p.y} h={32} />
-          ))}
+            <GardenBush
+              x={578}
+              y={590}
+              scale={0.94}
+              flowers={[
+                { dx: -10, dy: -4, color: '#FFE97A' },
+                { dx: 10, dy: 2, color: '#FF8AB5' },
+              ]}
+            />
+            <GardenBush
+              x={452}
+              y={584}
+              scale={0.68}
+              flowers={[{ dx: 4, dy: -3, color: '#74C4FF' }]}
+            />
+          </g>
+        )}
 
-          {/* Front-Right Wooden Fence */}
-          <line
-            x1={fenceFrontRight[0].x}
-            y1={fenceFrontRight[0].y - 16}
-            x2={fenceFrontRight[fenceFrontRight.length - 1].x}
-            y2={fenceFrontRight[fenceFrontRight.length - 1].y - 16}
-            stroke="#8B562C"
-            strokeWidth="6"
-            strokeLinecap="round"
-          />
-          {fenceFrontRight.map((p, i) => (
-            <WoodPost key={`ffr-${i}`} x={p.x} y={p.y} h={32} />
-          ))}
-
-          {/* Front Lush Bushes & Blooming Flowers */}
-          <GardenBush
-            x={578}
-            y={590}
-            scale={0.94}
-            flowers={[
-              { dx: -10, dy: -4, color: '#FFE97A' },
-              { dx: 10, dy: 2, color: '#FF8AB5' },
-            ]}
-          />
-          <GardenBush
-            x={452}
-            y={584}
-            scale={0.68}
-            flowers={[{ dx: 4, dy: -3, color: '#74C4FF' }]}
-          />
-        </g>
-
-        {/* 9. CAPTURED PIECES SIDELINE BENCHES OUTSIDE THE STONE WALLS! */}
-        {/* Left outer sideline: Enemy Dogs captured by Player 1 (Cat Kingdom) */}
+        {/* 9. CAPTURED PIECES SIDELINE BENCHES OUTSIDE THE STONE WALLS */}
         {leftBenchCoords.length > 0 && (
           <g className="pointer-events-none">
             {leftBenchCoords.map((item, idx) => (
@@ -1083,7 +1418,6 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
           </g>
         )}
 
-        {/* Right outer sideline: Enemy Cats captured by Player 2 (Dog Guard) */}
         {rightBenchCoords.length > 0 && (
           <g className="pointer-events-none">
             {rightBenchCoords.map((item, idx) => (
@@ -1108,9 +1442,9 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
         {/* 10. Floating "TAP UNTUK SERANG!" Speech Callout */}
         {firstCaptureTarget && !disabled && (
           (() => {
-            const pt = squareToIso(firstCaptureTarget, flipped);
+            const pt = squareToBoardPoint(firstCaptureTarget, flipped, boardView);
             const bx = Math.max(110, Math.min(ISO_VIEW_W - 110, pt.x));
-            const by = Math.max(54, pt.y - 84);
+            const by = Math.max(54, pt.y - 78);
             return (
               <g className="pointer-events-none animate-tile-glow">
                 <rect
@@ -1151,7 +1485,7 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
           .map((king) => {
             const emote = activeEmotes[king.color]!;
             const bx = Math.max(90, Math.min(ISO_VIEW_W - 90, king.x));
-            const by = Math.max(52, king.y - 88);
+            const by = Math.max(52, king.y - 84);
             return (
               <g key={emote.id} className="pointer-events-none">
                 <rect
@@ -1186,8 +1520,8 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
           })}
       </svg>
 
-      {/* 12. HTML5 Canvas 1.2s Cinematic SLASH! Blue-Gold Energy VFX Overlay */}
-      <SkillVfxCanvas event={vfxEvent} flipped={flipped} />
+      {/* 12. HTML5 Canvas 1.2s Cinematic SLASH! VFX Overlay (Synced with iso / flat!) */}
+      <SkillVfxCanvas event={vfxEvent} flipped={flipped} boardView={boardView} />
     </div>
   );
 };

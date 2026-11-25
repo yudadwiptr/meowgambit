@@ -105,9 +105,8 @@ export const MainMenu: React.FC<MainMenuProps> = ({
               <button
                 type="button"
                 onClick={() => updateMode('bot')}
-                className={`casual-btn py-1.5 sm:py-2 px-2 font-display text-xs sm:text-sm uppercase ${
-                  config.mode === 'bot' ? 'casual-btn-green text-white' : 'casual-btn-cream'
-                }`}
+                className={`casual-btn py-1.5 sm:py-2 px-2 font-display text-xs sm:text-sm uppercase ${config.mode === 'bot' ? 'casual-btn-green text-white' : 'casual-btn-cream'
+                  }`}
               >
                 <span className={config.mode === 'bot' ? 'cartoon-text-shadow-bold text-white' : ''}>
                   {t.vsBot}
@@ -116,9 +115,8 @@ export const MainMenu: React.FC<MainMenuProps> = ({
               <button
                 type="button"
                 onClick={() => updateMode('local')}
-                className={`casual-btn py-1.5 sm:py-2 px-2 font-display text-xs sm:text-sm uppercase ${
-                  config.mode === 'local' ? 'casual-btn-green text-white' : 'casual-btn-cream'
-                }`}
+                className={`casual-btn py-1.5 sm:py-2 px-2 font-display text-xs sm:text-sm uppercase ${config.mode === 'local' ? 'casual-btn-green text-white' : 'casual-btn-cream'
+                  }`}
               >
                 <span className={config.mode === 'local' ? 'cartoon-text-shadow-bold text-white' : ''}>
                   {t.local2p}
@@ -138,11 +136,10 @@ export const MainMenu: React.FC<MainMenuProps> = ({
                   <button
                     type="button"
                     onClick={() => updatePlayerColor('w')}
-                    className={`casual-btn py-1 px-2 flex items-center justify-center gap-1.5 font-display text-xs sm:text-sm uppercase ${
-                      config.playerColor === 'w'
-                        ? 'casual-btn-green text-white'
-                        : 'casual-btn-cream'
-                    }`}
+                    className={`casual-btn py-1 px-2 flex items-center justify-center gap-1.5 font-display text-xs sm:text-sm uppercase ${config.playerColor === 'w'
+                      ? 'casual-btn-green text-white'
+                      : 'casual-btn-cream'
+                      }`}
                   >
                     <div className="w-6 h-7 shrink-0">
                       <AnimalPiece color="w" type="r" showBadge={false} showShadow={false} />
@@ -158,11 +155,10 @@ export const MainMenu: React.FC<MainMenuProps> = ({
                   <button
                     type="button"
                     onClick={() => updatePlayerColor('b')}
-                    className={`casual-btn py-1 px-2 flex items-center justify-center gap-1.5 font-display text-xs sm:text-sm uppercase ${
-                      config.playerColor === 'b'
-                        ? 'casual-btn-green text-white'
-                        : 'casual-btn-cream'
-                    }`}
+                    className={`casual-btn py-1 px-2 flex items-center justify-center gap-1.5 font-display text-xs sm:text-sm uppercase ${config.playerColor === 'b'
+                      ? 'casual-btn-green text-white'
+                      : 'casual-btn-cream'
+                      }`}
                   >
                     <div className="w-6 h-7 shrink-0">
                       <AnimalPiece color="b" type="r" showBadge={false} showShadow={false} />
@@ -196,11 +192,10 @@ export const MainMenu: React.FC<MainMenuProps> = ({
                         key={id}
                         type="button"
                         onClick={() => updateDifficulty(id)}
-                        className={`casual-btn py-1.5 px-1 font-display text-[11px] sm:text-xs uppercase ${colorClass} ${
-                          active
-                            ? 'ring-2 ring-white scale-[1.03]'
-                            : 'opacity-72 hover:opacity-95'
-                        }`}
+                        className={`casual-btn py-1.5 px-1 font-display text-[11px] sm:text-xs uppercase ${colorClass} ${active
+                          ? 'ring-2 ring-white scale-[1.03]'
+                          : 'opacity-72 hover:opacity-95'
+                          }`}
                       >
                         <span className="cartoon-text-shadow-bold text-white">
                           {t.difficultyLabels[id].label}
@@ -227,9 +222,8 @@ export const MainMenu: React.FC<MainMenuProps> = ({
                 onClick={() =>
                   onChangeConfig({ ...config, autoFlipLocal: !config.autoFlipLocal })
                 }
-                className={`casual-btn px-3 py-1.5 font-display text-xs uppercase shrink-0 ${
-                  config.autoFlipLocal ? 'casual-btn-green text-white' : 'casual-btn-cream'
-                }`}
+                className={`casual-btn px-3 py-1.5 font-display text-xs uppercase shrink-0 ${config.autoFlipLocal ? 'casual-btn-green text-white' : 'casual-btn-cream'
+                  }`}
               >
                 <span className={config.autoFlipLocal ? 'cartoon-text-shadow-bold text-white' : ''}>
                   {config.autoFlipLocal ? t.on : t.off}
@@ -252,21 +246,18 @@ export const MainMenu: React.FC<MainMenuProps> = ({
                     key={tc}
                     type="button"
                     onClick={() => updateTimeControl(tc)}
-                    className={`casual-btn py-1 px-1 text-center ${
-                      active ? 'casual-btn-blue text-white' : 'casual-btn-cream opacity-95'
-                    }`}
+                    className={`casual-btn py-1 px-1 text-center ${active ? 'casual-btn-blue text-white' : 'casual-btn-cream opacity-95'
+                      }`}
                   >
                     <div
-                      className={`font-display text-[10px] sm:text-[11px] uppercase leading-tight ${
-                        active ? 'cartoon-text-shadow-bold text-white' : ''
-                      }`}
+                      className={`font-display text-[10px] sm:text-[11px] uppercase leading-tight ${active ? 'cartoon-text-shadow-bold text-white' : ''
+                        }`}
                     >
                       {info.title}
                     </div>
                     <div
-                      className={`text-[9px] font-bold leading-tight ${
-                        active ? 'text-[#FFF7D6]' : 'opacity-75'
-                      }`}
+                      className={`text-[9px] font-bold leading-tight ${active ? 'text-[#FFF7D6]' : 'opacity-75'
+                        }`}
                     >
                       {info.sub}
                     </div>

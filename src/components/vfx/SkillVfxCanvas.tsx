@@ -1,10 +1,11 @@
 import React, { useEffect, useRef } from 'react';
 import type { SkillVfxEvent } from '../../types/game';
-import { ISO_VIEW_H, ISO_VIEW_W, squareToIso } from '../board/isometric';
+import { ISO_VIEW_H, ISO_VIEW_W, squareToBoardPoint, type BoardView } from '../board/isometric';
 
 interface SkillVfxCanvasProps {
   event: SkillVfxEvent | null;
   flipped: boolean;
+  boardView?: BoardView;
 }
 
 interface DustPuff {
@@ -161,7 +162,11 @@ function drawBlueGoldSlashArc(
  * Renders curved blue-gold energy slashes, cartoon dust clouds, unit-specific accents,
  * and slanted comic "SLASH!" / "SKAK!" / "SKAKMAT!" typography.
  */
-export const SkillVfxCanvas: React.FC<SkillVfxCanvasProps> = ({ event, flipped }) => {
+export const SkillVfxCanvas: React.FC<SkillVfxCanvasProps> = ({
+  event,
+  flipped,
+  boardView = 'iso',
+}) => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const rafRef = useRef<number | null>(null);
 
@@ -191,8 +196,8 @@ export const SkillVfxCanvas: React.FC<SkillVfxCanvasProps> = ({ event, flipped }
     const scaleX = width / ISO_VIEW_W;
     const scaleY = height / ISO_VIEW_H;
 
-    const fromPt = squareToIso(event.from, flipped);
-    const toPt = squareToIso(event.to, flipped);
+    const fromPt = squareToBoardPoint(event.from, flipped, boardView);
+    const toPt = squareToBoardPoint(event.to, flipped, boardView);
     const flipDir = toPt.x >= fromPt.x ? 1 : -1;
 
     // Seed billowing cartoon dust clouds at impact base (persis referensi!)
@@ -411,7 +416,7 @@ export const SkillVfxCanvas: React.FC<SkillVfxCanvasProps> = ({ event, flipped }
     return () => {
       if (rafRef.current) cancelAnimationFrame(rafRef.current);
     };
-  }, [event, flipped]);
+  }, [event, flipped, boardView]);
 
   return (
     <canvas
