@@ -32,7 +32,6 @@ import { computeBotMove } from './engine/chessAI';
 import { soundEngine } from './engine/soundEngine';
 import { ChessBoard } from './components/board/ChessBoard';
 import type { BoardView } from './components/board/isometric';
-import { GardenBackdrop } from './components/board/GardenBackdrop';
 import { PlayerHud } from './components/hud/PlayerHud';
 import { ActionCluster } from './components/hud/ActionCluster';
 import { PromotionModal } from './components/modals/PromotionModal';
@@ -717,36 +716,31 @@ export default function App() {
   }
 
   return (
-    <div className="h-[100dvh] w-full garden-bg overflow-hidden relative">
-      {/* === RICH 2D CASTLE GARDEN SCENERY & FLOATING LEAVES/PETALS === */}
-      <GardenBackdrop />
-
-      {/* === CENTER ARENA: ENLARGED (+22–25%) 2.5D ISOMETRIC GARDEN DIORAMA ISLAND === */}
-      <main className="relative z-10 w-full h-full flex items-center justify-center px-1 sm:px-3 pt-10 pb-6 sm:pt-12 sm:pb-6">
-        <div className="w-full max-w-[min(100vw,calc((100dvh-54px)*1.62),1260px)]">
-          <ChessBoard
-            chess={chess}
-            fen={fen}
-            flipped={effectiveFlipped}
-            boardView={boardView}
-            selectedSquare={selectedSquare}
-            legalMoves={legalMovesForSelected}
-            lastMove={lastMove}
-            vfxEvent={vfxEvent}
-            isShaking={isShaking}
-            activeEmotes={activeEmotes}
-            disabled={isPlayerInteractionBlocked}
-            tapToAttackLabel={t.tapToAttack}
-            hintMove={hintMove}
-            capturedByWhite={armyStats.capturedByWhite}
-            capturedByBlack={armyStats.capturedByBlack}
-            onSquareClick={handleSquareClick}
-          />
-        </div>
+    <div className="h-[100dvh] w-full bg-[#24442E] overflow-hidden relative">
+      {/* === FULL-VIEWPORT AUTHENTIC /arena-bg.png + PIXEL-LOCKED 8x8 INTERACTIVE CHESS LAYER === */}
+      <main className="absolute inset-0 z-10 w-full h-full">
+        <ChessBoard
+          chess={chess}
+          fen={fen}
+          flipped={effectiveFlipped}
+          boardView={boardView}
+          selectedSquare={selectedSquare}
+          legalMoves={legalMovesForSelected}
+          lastMove={lastMove}
+          vfxEvent={vfxEvent}
+          isShaking={isShaking}
+          activeEmotes={activeEmotes}
+          disabled={isPlayerInteractionBlocked}
+          tapToAttackLabel={t.tapToAttack}
+          hintMove={hintMove}
+          capturedByWhite={armyStats.capturedByWhite}
+          capturedByBlack={armyStats.capturedByBlack}
+          onSquareClick={handleSquareClick}
+        />
       </main>
 
-      {/* === FLOATING TOP HUD BAR: Player 1 (Left) | Match Timer + Mini Utils (Center) | Player 2 (Right) === */}
-      <header className="absolute top-0 inset-x-0 z-20 w-full px-2.5 pt-2 sm:px-5 sm:pt-3 flex items-start justify-between gap-2 pointer-events-none">
+      {/* === COMPACT FLOATING TOP HUD BAR (Clear of the /arena-bg.png board apex!) === */}
+      <header className="absolute top-0 inset-x-0 z-20 w-full px-2.5 pt-2 sm:px-4 sm:pt-2.5 flex items-start justify-between gap-2 pointer-events-none">
         {/* Left: Player 1 (Cat Kingdom / White) */}
         <div className="pointer-events-auto">
           <PlayerHud
@@ -771,21 +765,21 @@ export default function App() {
           />
         </div>
 
-        {/* Center: Match Timer Pill + Compact Utility Buttons */}
-        <div className="pointer-events-auto flex flex-col items-center gap-1.5 shrink-0">
+        {/* Center: Ultra-Compact Single-Row Match Timer + Utility Strip so top board apex is never covered! */}
+        <div className="pointer-events-auto flex flex-wrap items-center justify-center gap-1.5 bg-[#1C2E24]/82 backdrop-blur-[2px] px-2 py-1 rounded-full border-2 border-[#132018] shadow-lg">
           <div
-            className={`flex items-center gap-1.5 px-3 py-1 sm:px-4 sm:py-1.5 rounded-full border-2 border-[#16241F] shadow-lg transition-colors ${
+            className={`flex items-center gap-1.5 px-2.5 py-0.5 rounded-full transition-colors ${
               isClockLow
                 ? 'bg-[#C63527] text-white animate-pulse'
-                : 'bg-[#22322B]/95 text-[#FFFDF5]'
+                : 'bg-[#121F18]/90 text-[#FFFDF5]'
             }`}
           >
-            <Clock className="w-4 h-4 text-[#FFE259] shrink-0" />
-            <span className="font-display text-sm sm:text-base tabular-nums tracking-wide leading-none">
+            <Clock className="w-3.5 h-3.5 text-[#FFE259] shrink-0" />
+            <span className="font-display text-xs sm:text-sm tabular-nums tracking-wide leading-none">
               {formatClock(activeClockMs)}
             </span>
             <span
-              className={`w-2.5 h-2.5 rounded-full border border-black/70 ${
+              className={`w-2 h-2 rounded-full border border-black/70 ${
                 currentTurn === 'w' ? 'bg-[#6CC8FF]' : 'bg-[#EF6351]'
               }`}
               title={currentTurn === 'w' ? t.catKingdom : t.dogGuard}
@@ -796,7 +790,7 @@ export default function App() {
             <button
               type="button"
               onClick={handleToggleBoardView}
-              className={`casual-btn px-2 py-1 text-[10px] font-display flex items-center gap-1 ${
+              className={`casual-btn px-2 py-0.5 text-[10px] font-display flex items-center gap-1 ${
                 boardView === 'flat' ? 'casual-btn-green text-white' : 'casual-btn-amber'
               }`}
               title={t.viewToggleTitle}
@@ -817,7 +811,7 @@ export default function App() {
             <button
               type="button"
               onClick={handleToggleLang}
-              className="casual-btn casual-btn-dark px-2 py-1 text-[10px] font-display flex items-center gap-0.5"
+              className="casual-btn casual-btn-dark px-1.5 py-0.5 text-[10px] font-display flex items-center gap-0.5"
               title={lang === 'id' ? 'Switch to English' : 'Ganti ke Bahasa Indonesia'}
             >
               <Globe className="w-3 h-3 text-[#78F0FF]" />
@@ -832,7 +826,7 @@ export default function App() {
                 setManualFlipped((f) => !f);
                 soundEngine.playSelect();
               }}
-              className="casual-btn casual-btn-dark p-1.5"
+              className="casual-btn casual-btn-dark p-1"
               title={t.flipBtn}
               aria-label={t.flipBtn}
             >
@@ -841,7 +835,7 @@ export default function App() {
             <button
               type="button"
               onClick={handleToggleMute}
-              className="casual-btn casual-btn-dark p-1.5"
+              className="casual-btn casual-btn-dark p-1"
               title={muted ? 'Unmute' : 'Mute'}
               aria-label="Toggle Sound"
             >
@@ -854,7 +848,7 @@ export default function App() {
             <button
               type="button"
               onClick={() => startNewMatch(config)}
-              className="casual-btn casual-btn-dark p-1.5"
+              className="casual-btn casual-btn-dark p-1"
               title={t.resetBtn}
               aria-label={t.resetBtn}
             >
@@ -866,7 +860,7 @@ export default function App() {
                 clearPendingTimers();
                 setScreen('menu');
               }}
-              className="casual-btn casual-btn-dark p-1.5"
+              className="casual-btn casual-btn-dark p-1"
               title={t.menuBtn}
               aria-label={t.menuBtn}
             >
