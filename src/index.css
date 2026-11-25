@@ -1,0 +1,269 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html,
+  body,
+  #root {
+    height: 100%;
+    height: 100dvh;
+    width: 100%;
+    margin: 0;
+    padding: 0;
+    overflow: hidden;
+    font-family: 'Space Grotesk', system-ui, -apple-system, sans-serif;
+    -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation;
+    background-color: #1e382b;
+  }
+}
+
+.font-display {
+  font-family: 'Archivo Black', Impact, 'Arial Black', sans-serif;
+}
+
+/* =========================================================
+   2D/2.5D CASUAL CARTOON GARDEN GAME UI SYSTEM
+   ========================================================= */
+.garden-bg {
+  background: radial-gradient(ellipse at 50% 42%, #35604a 0%, #2d4f3e 45%, #1e382b 100%);
+}
+
+/* Glossy Casual Game Panel (Wood / Warm Slate Frame) */
+.casual-panel {
+  background: linear-gradient(180deg, #fffaf0 0%, #f4ead5 100%);
+  border: 3px solid #4a3525;
+  border-radius: 22px;
+  box-shadow:
+    0 8px 20px rgba(10, 24, 17, 0.45),
+    inset 0 2px 0 rgba(255, 255, 255, 0.85),
+    inset 0 -3px 0 rgba(130, 96, 60, 0.25);
+}
+
+.casual-panel-dark {
+  background: linear-gradient(180deg, #324a42 0%, #21342e 100%);
+  border: 2.5px solid #16241f;
+  border-radius: 18px;
+  box-shadow:
+    0 6px 16px rgba(0, 0, 0, 0.42),
+    inset 0 1.5px 0 rgba(255, 255, 255, 0.22),
+    inset 0 -3px 0 rgba(0, 0, 0, 0.35);
+}
+
+/* HUD Player Profile Cards (Blue Team Cat / Red Team Dog) */
+.hud-card-blue {
+  background: linear-gradient(180deg, #4b86b8 0%, #2d5c88 100%);
+  border: 2.5px solid #1a324a;
+  border-radius: 16px;
+  box-shadow:
+    0 5px 12px rgba(0, 0, 0, 0.38),
+    inset 0 2px 0 rgba(185, 226, 255, 0.55),
+    inset 0 -3px 0 rgba(16, 36, 56, 0.45);
+}
+
+.hud-card-red {
+  background: linear-gradient(180deg, #b8534b 0%, #86332d 100%);
+  border: 2.5px solid #471916;
+  border-radius: 16px;
+  box-shadow:
+    0 5px 12px rgba(0, 0, 0, 0.38),
+    inset 0 2px 0 rgba(255, 198, 185, 0.5),
+    inset 0 -3px 0 rgba(56, 16, 14, 0.45);
+}
+
+/* Tactile Glossy Casual Buttons */
+.casual-btn {
+  border-radius: 14px;
+  border: 2.5px solid rgba(25, 20, 15, 0.85);
+  box-shadow:
+    0 4px 0 rgba(22, 18, 12, 0.65),
+    0 6px 12px rgba(0, 0, 0, 0.28),
+    inset 0 2px 0 rgba(255, 255, 255, 0.48);
+  transition: transform 90ms ease, box-shadow 90ms ease, filter 120ms ease;
+}
+
+.casual-btn:hover:not(:disabled) {
+  filter: brightness(1.06);
+}
+
+.casual-btn:active:not(:disabled) {
+  transform: translateY(2px) scale(0.98);
+  box-shadow:
+    0 1.5px 0 rgba(22, 18, 12, 0.7),
+    0 2px 6px rgba(0, 0, 0, 0.25),
+    inset 0 1px 0 rgba(255, 255, 255, 0.35);
+}
+
+.casual-btn:disabled {
+  opacity: 0.48;
+  cursor: not-allowed;
+}
+
+.casual-btn-green {
+  background: linear-gradient(180deg, #86e34f 0%, #4cb82c 100%);
+  color: #10260a;
+}
+
+.casual-btn-amber {
+  background: linear-gradient(180deg, #ffe259 0%, #f5a623 100%);
+  color: #361d04;
+}
+
+.casual-btn-blue {
+  background: linear-gradient(180deg, #5cc8ff 0%, #2488d8 100%);
+  color: #ffffff;
+}
+
+.casual-btn-red {
+  background: linear-gradient(180deg, #ef6351 0%, #c63527 100%);
+  color: #ffffff;
+}
+
+.casual-btn-cream {
+  background: linear-gradient(180deg, #fffdf8 0%, #eadec7 100%);
+  color: #2c241b;
+}
+
+.casual-btn-dark {
+  background: linear-gradient(180deg, #435e54 0%, #2a3e36 100%);
+  color: #f4f7f2;
+}
+
+/* Circular Action Orb Buttons (Bottom Right HUD) */
+.casual-orb {
+  border-radius: 9999px;
+  border: 3px solid #2b2118;
+  box-shadow:
+    0 5px 0 rgba(18, 14, 10, 0.72),
+    0 8px 14px rgba(0, 0, 0, 0.4),
+    inset 0 3px 0 rgba(255, 255, 255, 0.55);
+  transition: transform 90ms ease, box-shadow 90ms ease, filter 120ms ease;
+}
+
+.casual-orb:hover:not(:disabled) {
+  filter: brightness(1.07);
+}
+
+.casual-orb:active:not(:disabled) {
+  transform: translateY(3px) scale(0.96);
+  box-shadow:
+    0 2px 0 rgba(18, 14, 10, 0.72),
+    0 4px 8px rgba(0, 0, 0, 0.35),
+    inset 0 2px 0 rgba(255, 255, 255, 0.38);
+}
+
+.casual-orb:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+/* Comic / Cartoon Outlined Text Shadow */
+.cartoon-text-shadow {
+  text-shadow:
+    0 2px 0 #1b1612,
+    1.5px 1.5px 0 #1b1612,
+    -1px -1px 0 #1b1612,
+    1px -1px 0 #1b1612,
+    -1px 1px 0 #1b1612;
+}
+
+/* Gentle Screen Shake on Heavy Capture/Check */
+@keyframes board-shake {
+  0% { transform: translate(0px, 0px); }
+  15% { transform: translate(-4px, 2px); }
+  30% { transform: translate(4px, -3px); }
+  45% { transform: translate(-3px, -2px); }
+  60% { transform: translate(3px, 3px); }
+  75% { transform: translate(-2px, 1px); }
+  100% { transform: translate(0px, 0px); }
+}
+
+.animate-board-shake {
+  animation: board-shake 0.34s cubic-bezier(0.36, 0.07, 0.19, 0.97) both;
+}
+
+/* Attack Jump Lunge Animation */
+@keyframes attack-jump {
+  0% { transform: translate(var(--jump-dx, 0px), var(--jump-dy, 0px)) scale(1.02); }
+  42% { transform: translate(calc(var(--jump-dx, 0px) * 0.45), calc(var(--jump-dy, 0px) * 0.45 - 38px)) scale(1.18) rotate(-7deg); }
+  75% { transform: translate(0px, -6px) scale(1.08) rotate(4deg); }
+  100% { transform: translate(0px, 0px) scale(1) rotate(0deg); }
+}
+
+.animate-attack-jump {
+  animation: attack-jump 0.46s cubic-bezier(0.22, 0.85, 0.32, 1) both;
+}
+
+/* Soft Piece Hop on Normal Move */
+@keyframes piece-hop {
+  0% { transform: translateY(-10px) scale(1.08); }
+  65% { transform: translateY(2px) scale(0.96); }
+  100% { transform: translateY(0) scale(1); }
+}
+
+.animate-piece-hop {
+  animation: piece-hop 0.26s ease-out;
+}
+
+/* Selected Piece Idle Float */
+@keyframes piece-float {
+  0%, 100% { transform: translateY(-6px) scale(1.07); }
+  50% { transform: translateY(-11px) scale(1.09); }
+}
+
+.animate-piece-float {
+  animation: piece-float 0.95s ease-in-out infinite;
+}
+
+/* Glowing Tile Pulse */
+@keyframes tile-glow {
+  0%, 100% { opacity: 0.92; }
+  50% { opacity: 0.65; }
+}
+
+.animate-tile-glow {
+  animation: tile-glow 1.1s ease-in-out infinite;
+}
+
+/* Emote Speech Bubble Pop */
+@keyframes emote-pop {
+  0% {
+    transform: translate(-50%, 8px) scale(0.45);
+    opacity: 0;
+  }
+  18% {
+    transform: translate(-50%, -6px) scale(1.08);
+    opacity: 1;
+  }
+  28% {
+    transform: translate(-50%, -4px) scale(1);
+    opacity: 1;
+  }
+  85% {
+    transform: translate(-50%, -6px) scale(1);
+    opacity: 1;
+  }
+  100% {
+    transform: translate(-50%, -14px) scale(0.88);
+    opacity: 0;
+  }
+}
+
+.animate-emote-pop {
+  animation: emote-pop 2.1s ease-out forwards;
+}
+
+/* Warm Casual Scrollbar */
+.casual-scroll::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+.casual-scroll::-webkit-scrollbar-track {
+  background: rgba(30, 56, 43, 0.12);
+  border-radius: 999px;
+}
+.casual-scroll::-webkit-scrollbar-thumb {
+  background: rgba(74, 53, 37, 0.45);
+  border-radius: 999px;
+}

@@ -1,0 +1,25 @@
+{
+  "name": "MeowGambit — Arcade Chess",
+  "short_name": "MeowGambit",
+  "description": "2D Neobrutalism Arcade Chess PWA: Cat Kingdom vs Dog Guard with cinematic skill VFX!",
+  "start_url": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#2D4F3E",
+  "theme_color": "#2D4F3E",
+  "categories": ["games", "board", "strategy"],
+  "icons": [
+    {
+      "src": "/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
